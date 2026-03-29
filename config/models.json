@@ -1,0 +1,4 @@
+{
+    "model": "yolo26x-pose.pt",
+    "models_dir": "models"
+}

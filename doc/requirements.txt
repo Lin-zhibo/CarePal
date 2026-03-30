@@ -1,0 +1,12 @@
+requests>=2.32.0
+python-dotenv>=1.0.1
+websocket-client>=1.8.0
+numpy>=1.26.0
+sounddevice>=0.4.6
+playsound==1.2.2
+fastapi>=0.115.0
+uvicorn>=0.30.0
+sqlalchemy>=2.0.35
+python-jose>=3.3.0
+passlib>=1.7.4
+python-multipart>=0.0.9

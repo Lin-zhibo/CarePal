@@ -23,6 +23,7 @@ class Settings:
     tts_poll_interval_seconds: float = float(os.getenv("TTS_POLL_INTERVAL_SECONDS", "1.0"))
     tts_max_wait_seconds: int = int(os.getenv("TTS_MAX_WAIT_SECONDS", "180"))
     tts_max_chars_per_task: int = int(os.getenv("TTS_MAX_CHARS_PER_TASK", "220"))
+    context_max_turns: int = int(os.getenv("CONTEXT_MAX_TURNS", "50"))
     memory_path: str = os.getenv("MEMORY_PATH", "memory/history.json")
     rag_enabled: bool = os.getenv("RAG_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
     rag_db_path: str = os.getenv("RAG_DB_PATH", "memory/rag_knowledge.db")

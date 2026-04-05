@@ -20,7 +20,7 @@ SYSTEM_PROMPT = (
 class PipelineResult:
     user_text: str
     assistant_text: str
-    audio_output_path: str
+    audio_output_path: str | None = None
 
 
 class VoicePipeline:
@@ -75,16 +75,24 @@ class VoicePipeline:
         self,
         user_text: str,
         history: List[Dict[str, str]],
-        output_audio_path: str,
+        output_audio_path: str | None = None,
         stream_to_console: bool = True,
+        system_prompt: str | None = None,
+        enable_tts: bool = True,
     ) -> PipelineResult:
         user_text = user_text.strip()
         if not user_text:
             raise ValueError("user_text is empty")
 
+        if system_prompt:
+            if history and history[0].get("role") == "system":
+                history[0] = {"role": "system", "content": system_prompt}
+            else:
+                history.insert(0, {"role": "system", "content": system_prompt})
+
         work_history = self._ensure_system(history)
         work_history.append({"role": "user", "content": user_text})
-        work_history = clip_history(work_history, max_turns=10)
+        work_history = clip_history(work_history, max_turns=self.settings.context_max_turns)
 
         llm_messages = [dict(item) for item in work_history]
         llm_messages[-1]["content"] = self._build_user_content_with_rag(user_text)
@@ -104,20 +112,28 @@ class VoicePipeline:
         work_history.append({"role": "assistant", "content": assistant_text})
         history[:] = work_history
 
-        self.tts.synthesize_to_file(assistant_text, output_audio_path)
+        final_audio_path = None
+        if enable_tts:
+            if not output_audio_path:
+                raise ValueError("enable_tts=True 时必须提供 output_audio_path")
+            self.tts.synthesize_to_file(assistant_text, output_audio_path)
+            final_audio_path = output_audio_path
+
         return PipelineResult(
             user_text=user_text,
             assistant_text=assistant_text,
-            audio_output_path=output_audio_path,
+            audio_output_path=final_audio_path,
         )
 
     def run_from_audio(
         self,
         audio_path: str,
         history: List[Dict[str, str]],
-        output_audio_path: str,
+        output_audio_path: str | None = None,
         language: str = "zh_cn",
         stream_to_console: bool = True,
+        system_prompt: str | None = None,
+        enable_tts: bool = True,
     ) -> PipelineResult:
         user_text = self.asr.transcribe_file(audio_path=audio_path, language=language)
         return self.run_from_text(
@@ -125,4 +141,6 @@ class VoicePipeline:
             history=history,
             output_audio_path=output_audio_path,
             stream_to_console=stream_to_console,
+            system_prompt=system_prompt,
+            enable_tts=enable_tts,
         )

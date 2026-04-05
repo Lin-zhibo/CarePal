@@ -35,7 +35,26 @@ class AuthResponse(BaseModel):
 
 class TextChatRequest(BaseModel):
     message: str
+    prompt: int | None = Field(default=None, description="提示词模板编号，当前支持 1 或 2")
+    with_text: bool = True
+    with_audio: bool = False
 
 
 class TextChatResponse(BaseModel):
-    answer: str
+    answer: str | None = None
+    asr_text: str | None = None
+    assistant_text: str | None = None
+    assistant_payload: dict | None = None
+    audio_file_url: str | None = None
+
+
+class VoiceChatMetaResponse(BaseModel):
+    asr_text: str | None = None
+    assistant_text: str | None = None
+    assistant_payload: dict | None = None
+    audio_file_url: str | None = None
+
+
+class OCRAnalyzeResponse(BaseModel):
+    text: str
+    audio_file_url: str | None = None

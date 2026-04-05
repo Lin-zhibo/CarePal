@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+from openai import OpenAI
+
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(ROOT_DIR / ".env")
+load_dotenv(ROOT_DIR / "doc" / ".env")
+
+
+@dataclass
+class OCRSettings:
+    base_url: str = os.getenv("OCR_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+    api_key_direct: str = os.getenv("OCR_API_KEY", "")
+    agent_1_model_name: str = os.getenv("OCR_AGENT_1_MODEL", "doubao-seed-2-0-pro-260215")
+    # Agent2/3 统一使用后端通用 LLM_MODEL（讯飞接口）
+    llm_model_name: str = os.getenv("LLM_MODEL", "4.0Ultra")
+    xfyun_llm_api_password: str = os.getenv("XFYUN_LLM_API_PASSWORD", "")
+    xfyun_llm_url: str = os.getenv("XFYUN_LLM_URL", "https://spark-api-open.xf-yun.com/v1/chat/completions")
+
+
+def get_ocr_settings() -> OCRSettings:
+    return OCRSettings()
+
+
+def create_client(settings: OCRSettings) -> OpenAI:
+    api_key = (settings.api_key_direct or "").strip()
+    if not api_key:
+        env_name = (settings.api_key_env_var or "").strip()
+        api_key = os.getenv(env_name, "").strip()
+
+        # 兼容误配置：将 OCR_API_KEY_ENV_VAR 直接填成了真实 key
+        if not api_key and env_name and any(ch in env_name for ch in ["-", "_"]):
+            if len(env_name) > 24:
+                api_key = env_name
+
+    if not api_key:
+        raise RuntimeError(
+            "未找到 OCR API Key。请在 .env 中设置 OCR_API_KEY，"
+            "或设置 OCR_API_KEY_ENV_VAR 为环境变量名并确保该变量存在。"
+        )
+    return OpenAI(base_url=settings.base_url, api_key=api_key)

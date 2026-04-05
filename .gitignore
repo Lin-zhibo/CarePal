@@ -1,3 +1,4 @@
-models/*.pt
-
-log/*
+start/
+img/
+outputs/
+memory/

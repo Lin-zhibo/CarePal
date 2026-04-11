@@ -86,6 +86,12 @@ pip install -r doc/requirements.txt
 uvicorn src.backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+生产并发建议：
+
+```bash
+uvicorn src.backend.main:app --host 0.0.0.0 --port 8000 --workers 2
+```
+
 ---
 
 ## 3. 项目流程简述
@@ -101,6 +107,7 @@ uvicorn src.backend.main:app --host 0.0.0.0 --port 8000 --reload
    - 返回音频流或音频下载URL
 
 特别规则：
+
 - `prompt=1` 且识别为 `schedule_edit` 时，不执行TTS，直接返回结构化文本。
 
 ### 3.2 OCR接口流程（`/ocr/analyze`）
@@ -134,3 +141,19 @@ python demo/api_try/test_backend_ocr_api.py --images "img/img1.jpg,img/img2.jpg"
 完整接口定义、参数表、示例请求见：
 
 - `doc/API.md`
+
+## 6. 技术文档
+
+- `doc/TECHNICAL.md`
+
+## 7. 并发测试
+
+并发测试脚本：
+
+- `demo/api_try/test_backend_concurrency.py`
+
+示例：
+
+```bash
+python demo/api_try/test_backend_concurrency.py --mode mixed --users 5 --requests-per-user 2 --audio demo/test.wav --images "img/img1.jpg,img/img2.jpg"
+```

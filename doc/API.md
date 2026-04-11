@@ -43,10 +43,10 @@
 
 请求 JSON：
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| username | string | 是 | 用户名（3-64） |
-| password | string | 是 | 密码（6-128） |
+| 字段     | 类型   | 必填 | 说明           |
+| -------- | ------ | ---- | -------------- |
+| username | string | 是   | 用户名（3-64） |
+| password | string | 是   | 密码（6-128）  |
 
 ### POST `/auth/login`
 
@@ -74,24 +74,25 @@
 
 请求 JSON：
 
-| 字段 | 类型 | 必填 | 默认 | 说明 |
-|---|---|---|---|---|
-| message | string | 是 | - | 用户输入文本 |
-| prompt | int | 否 | null | 提示词模板编号，支持 `1` 或 `2` |
-| with_text | bool | 否 | true | 是否返回文本字段 |
-| with_audio | bool | 否 | false | 是否执行TTS并返回音频URL |
+| 字段       | 类型   | 必填 | 默认  | 说明                                |
+| ---------- | ------ | ---- | ----- | ----------------------------------- |
+| message    | string | 是   | -     | 用户输入文本                        |
+| prompt     | int    | 否   | null  | 提示词模板编号，支持 `1` 或 `2` |
+| with_text  | bool   | 否   | true  | 是否返回文本字段                    |
+| with_audio | bool   | 否   | false | 是否执行TTS并返回音频URL            |
 
 响应 JSON：
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| answer | string/null | 便捷文本返回 |
-| asr_text | string/null | 文本接口固定 null |
-| assistant_text | string/null | 助手文本结果 |
+| 字段              | 类型        | 说明                                      |
+| ----------------- | ----------- | ----------------------------------------- |
+| answer            | string/null | 便捷文本返回                              |
+| asr_text          | string/null | 文本接口固定 null                         |
+| assistant_text    | string/null | 助手文本结果                              |
 | assistant_payload | object/null | 若模型返回可解析结构化 JSON，则返回该对象 |
-| audio_file_url | string/null | with_audio=true 且成功生成音频时返回 |
+| audio_file_url    | string/null | with_audio=true 且成功生成音频时返回      |
 
 业务规则：
+
 - `prompt=1` 且识别到 `intent=normal_chat`：仅 `reply_text` 会被用于文本输出和 TTS。
 - `prompt=1` 且识别到 `intent=schedule_edit`：不执行 TTS，直接返回结构化文本。
 
@@ -103,30 +104,31 @@
 
 请求类型：`multipart/form-data`
 
-| 字段 | 类型 | 必填 | 默认 | 说明 |
-|---|---|---|---|---|
-| audio | file | 是 | - | 输入音频，支持 `.wav(raw)` / `.mp3(lame)` |
-| prompt | int | 否 | null | 提示词模板编号，支持 `1` 或 `2` |
-| with_text | bool/string | 否 | false | 是否返回 ASR + LLM 文本 |
-| with_audio | bool/string | 否 | true | 是否执行TTS并返回音频 |
+| 字段       | 类型        | 必填 | 默认  | 说明                                          |
+| ---------- | ----------- | ---- | ----- | --------------------------------------------- |
+| audio      | file        | 是   | -     | 输入音频，支持 `.wav(raw)` / `.mp3(lame)` |
+| prompt     | int         | 否   | null  | 提示词模板编号，支持 `1` 或 `2`           |
+| with_text  | bool/string | 否   | false | 是否返回 ASR + LLM 文本                       |
+| with_audio | bool/string | 否   | true  | 是否执行TTS并返回音频                         |
 
 响应规则：
 
 1. `with_audio=true` 且本轮允许TTS：
+
    - 若 `with_text=false`：直接返回 `audio/mpeg` 文件流
    - 若 `with_text=true`：返回 JSON（包含 `audio_file_url`）
-
 2. `with_audio=false` 或业务规则禁止TTS（如 `prompt=1` + `schedule_edit`）：
+
    - 返回 JSON，不返回音频流
 
 JSON 响应字段：
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| asr_text | string/null | ASR识别文本（with_text=false 时通常为 null） |
-| assistant_text | string/null | LLM文本结果 |
-| assistant_payload | object/null | 结构化结果（若可解析） |
-| audio_file_url | string/null | 生成音频时可下载地址 |
+| 字段              | 类型        | 说明                                         |
+| ----------------- | ----------- | -------------------------------------------- |
+| asr_text          | string/null | ASR识别文本（with_text=false 时通常为 null） |
+| assistant_text    | string/null | LLM文本结果                                  |
+| assistant_payload | object/null | 结构化结果（若可解析）                       |
+| audio_file_url    | string/null | 生成音频时可下载地址                         |
 
 ---
 
@@ -146,25 +148,24 @@ JSON 响应字段：
 
 请求类型：`multipart/form-data`
 
-| 字段 | 类型 | 必填 | 默认 | 说明 |
-|---|---|---|---|---|
-| images | file[] | 是 | - | 一张或多张图片（png/jpg/jpeg） |
-| prompt | string | 否 | 默认提示词 | 用户补充问题 |
-| with_audio | bool/string | 否 | false | 是否把最终 OCR 文本转语音 |
+| 字段       | 类型        | 必填 | 默认       | 说明                           |
+| ---------- | ----------- | ---- | ---------- | ------------------------------ |
+| images     | file[]      | 是   | -          | 一张或多张图片（png/jpg/jpeg） |
+| prompt     | string      | 否   | 默认提示词 | 用户补充问题                   |
+| with_audio | bool/string | 否   | false      | 是否把最终 OCR 文本转语音      |
 
 响应 JSON：
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| text | string | 返回给前端的最终文本（仅Agent3结果，已做格式清洗） |
-| audio_file_url | string/null | with_audio=true 且TTS成功时返回 |
+| 字段           | 类型        | 说明                                               |
+| -------------- | ----------- | -------------------------------------------------- |
+| text           | string      | 返回给前端的最终文本（仅Agent3结果，已做格式清洗） |
+| audio_file_url | string/null | with_audio=true 且TTS成功时返回                    |
 
 说明：
+
 - Agent1：使用 OCR 视觉模型（`OCR_AGENT_1_MODEL`）
 - Agent2/3：使用通用 LLM（`LLM_MODEL=4.0Ultra`）
 - OCR 返回给前端仅保留清洗后的 Agent3 文本，便于前端展示与 TTS。
-
----
 
 ## 8. 快速调用示例
 

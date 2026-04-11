@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -88,7 +89,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/chat/text", response_model=TextChatResponse)
-def chat_text(
+async def chat_text(
     payload: TextChatRequest,
     auth: AuthContext = Depends(get_auth_context),
 ):
@@ -97,13 +98,14 @@ def chat_text(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
-    result = voice_agent_service.text_chat(
-        user_key=auth.token,
-        username=auth.user.username,
-        message=payload.message,
-        prompt_id=payload.prompt,
-        prompt=prompt_text,
-        with_audio=payload.with_audio,
+    result = await run_in_threadpool(
+        voice_agent_service.text_chat,
+        auth.token,
+        auth.user.username,
+        payload.message,
+        payload.prompt,
+        prompt_text,
+        payload.with_audio,
     )
     audio_file_url = None
     if payload.with_audio and result.get("audio_output_path"):
@@ -162,14 +164,15 @@ async def chat_voice(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     try:
-        voice_result = voice_agent_service.voice_chat(
-            user_key=auth.token,
-            username=auth.user.username,
-            input_audio_path=input_path,
-            output_audio_path=output_path,
-            prompt_id=prompt,
-            prompt=prompt_text,
-            with_audio=with_audio,
+        voice_result = await run_in_threadpool(
+            voice_agent_service.voice_chat,
+            auth.token,
+            auth.user.username,
+            input_path,
+            output_path,
+            prompt,
+            prompt_text,
+            with_audio,
         )
     except (RuntimeError, ValueError) as e:
         logger.warning("/chat/voice bad request: %s", e)
@@ -243,7 +246,7 @@ async def ocr_analyze(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All uploaded images are empty")
 
     try:
-        result = ocr_service.analyze_images(session_key=auth.token, image_paths=saved_paths, prompt=prompt)
+        result = await run_in_threadpool(ocr_service.analyze_images, auth.token, saved_paths, prompt)
     except Exception as e:
         logger.exception("/ocr/analyze failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
@@ -252,7 +255,7 @@ async def ocr_analyze(
     if with_audio and result.text:
         audio_path = os.path.join("outputs", "backend", "reply", f"ocr_{auth.user.username}_{ts}.mp3")
         try:
-            voice_agent_service.pipeline.tts.synthesize_to_file(result.text, audio_path)
+            await run_in_threadpool(voice_agent_service.pipeline.tts.synthesize_to_file, result.text, audio_path)
             ocr_audio_url = f"/chat/voice/file/{Path(audio_path).name}"
         except Exception as e:
             logger.exception("/ocr/analyze tts failed")

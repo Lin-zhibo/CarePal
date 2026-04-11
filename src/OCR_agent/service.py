@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,8 @@ class OCRMultiAgentService:
         self.settings = get_ocr_settings()
         self.client = create_client(self.settings)
         self.histories: dict[str, list[dict[str, str]]] = {}
+        self._session_locks: dict[str, threading.Lock] = {}
+        self._manager_lock = threading.RLock()
 
     def _run_agent(self, model_name: str, system_prompt: str, user_content: Any) -> str:
         # Agent1：OCR视觉模型路径（支持 image_url 内容）
@@ -144,9 +147,16 @@ class OCRMultiAgentService:
         return image_content
 
     def _history(self, session_key: str) -> list[dict[str, str]]:
-        if session_key not in self.histories:
-            self.histories[session_key] = []
-        return self.histories[session_key]
+        with self._manager_lock:
+            if session_key not in self.histories:
+                self.histories[session_key] = []
+            return self.histories[session_key]
+
+    def _get_session_lock(self, session_key: str) -> threading.Lock:
+        with self._manager_lock:
+            if session_key not in self._session_locks:
+                self._session_locks[session_key] = threading.Lock()
+            return self._session_locks[session_key]
 
     @staticmethod
     def _format_history(history: list[dict[str, str]], max_turns: int = 6) -> str:
@@ -163,32 +173,34 @@ class OCRMultiAgentService:
         return "\n\n".join(parts)
 
     def analyze_images(self, session_key: str, image_paths: list[Path], prompt: str | None = None) -> OCRResult:
-        user_prompt = (prompt or "").strip() or DEFAULT_PROMPT
-        image_content = self._build_image_content(image_paths, user_prompt)
+        session_lock = self._get_session_lock(session_key)
+        with session_lock:
+            user_prompt = (prompt or "").strip() or DEFAULT_PROMPT
+            image_content = self._build_image_content(image_paths, user_prompt)
 
-        agent_1_result = self._run_agent(self.settings.agent_1_model_name, AGENT_1_SYSTEM_PROMPT, image_content)
-        history = self._history(session_key)
+            agent_1_result = self._run_agent(self.settings.agent_1_model_name, AGENT_1_SYSTEM_PROMPT, image_content)
+            history = self._history(session_key)
 
-        agent_2_input = (
-            "以下是 Agent 1 当前提取到的药品关键信息，请始终以此为基础分析：\n\n"
-            f"{agent_1_result}\n\n"
-            "以下是最近的历史对话，请结合上下文理解用户当前问题：\n\n"
-            f"{self._format_history(history)}\n\n"
-            "以下是用户本轮最新输入，请优先回答这一次的问题；如果信息不足，请提出最关键的追问：\n\n"
-            f"{user_prompt}"
-        )
-        agent_2_result = self._run_llm_agent(AGENT_2_SYSTEM_PROMPT, agent_2_input)
+            agent_2_input = (
+                "以下是 Agent 1 当前提取到的药品关键信息，请始终以此为基础分析：\n\n"
+                f"{agent_1_result}\n\n"
+                "以下是最近的历史对话，请结合上下文理解用户当前问题：\n\n"
+                f"{self._format_history(history)}\n\n"
+                "以下是用户本轮最新输入，请优先回答这一次的问题；如果信息不足，请提出最关键的追问：\n\n"
+                f"{user_prompt}"
+            )
+            agent_2_result = self._run_llm_agent(AGENT_2_SYSTEM_PROMPT, agent_2_input)
 
-        agent_3_input = (
-            f"用户本轮最新输入：{user_prompt}\n\n"
-            "请把下面这段专业说明改写得更通俗易懂，但不要新增事实或改变结论：\n\n"
-            f"{agent_2_result}"
-        )
-        agent_3_result = self._run_llm_agent(AGENT_3_SYSTEM_PROMPT, agent_3_input)
+            agent_3_input = (
+                f"用户本轮最新输入：{user_prompt}\n\n"
+                "请把下面这段专业说明改写得更通俗易懂，但不要新增事实或改变结论：\n\n"
+                f"{agent_2_result}"
+            )
+            agent_3_result = self._run_llm_agent(AGENT_3_SYSTEM_PROMPT, agent_3_input)
 
-        history.append({"user": user_prompt, "agent_2": agent_2_result, "agent_3": agent_3_result})
-        cleaned = self._clean_agent3_text(agent_3_result)
-        return OCRResult(text=cleaned)
+            history.append({"user": user_prompt, "agent_2": agent_2_result, "agent_3": agent_3_result})
+            cleaned = self._clean_agent3_text(agent_3_result)
+            return OCRResult(text=cleaned)
 
     @staticmethod
     def _clean_agent3_text(text: str) -> str:

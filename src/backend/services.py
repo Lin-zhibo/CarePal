@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import datetime
 from typing import Any
 from typing import Dict, List
@@ -42,11 +43,20 @@ class VoiceAgentService:
         self.settings = get_settings()
         self.pipeline = VoicePipeline(self.settings)
         self.user_histories: Dict[str, List[Dict[str, str]]] = {}
+        self._session_locks: Dict[str, threading.Lock] = {}
+        self._manager_lock = threading.RLock()
 
     def _history(self, user_key: str) -> List[Dict[str, str]]:
-        if user_key not in self.user_histories:
-            self.user_histories[user_key] = []
-        return self.user_histories[user_key]
+        with self._manager_lock:
+            if user_key not in self.user_histories:
+                self.user_histories[user_key] = []
+            return self.user_histories[user_key]
+
+    def _get_session_lock(self, user_key: str) -> threading.Lock:
+        with self._manager_lock:
+            if user_key not in self._session_locks:
+                self._session_locks[user_key] = threading.Lock()
+            return self._session_locks[user_key]
 
     @staticmethod
     def _compress_history_if_needed(history: List[Dict[str, str]]) -> None:
@@ -91,33 +101,35 @@ class VoiceAgentService:
         prompt: str | None = None,
         with_audio: bool = False,
     ) -> dict:
-        history = self._history(user_key)
-        self._compress_history_if_needed(history)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        out_path = os.path.join("outputs", "backend", "reply", f"{username}_{ts}.mp3")
-        result = self.pipeline.run_from_text(
-            user_text=message,
-            history=history,
-            output_audio_path=None,
-            stream_to_console=False,
-            system_prompt=prompt,
-            enable_tts=False,
-        )
-        parsed_payload = self._try_parse_json(result.assistant_text)
-        tts_text, allow_tts = self._decide_tts_text(prompt_id, result.assistant_text, parsed_payload)
-        frontend_text = self._decide_frontend_text(prompt_id, result.assistant_text, parsed_payload)
+        session_lock = self._get_session_lock(user_key)
+        with session_lock:
+            history = self._history(user_key)
+            self._compress_history_if_needed(history)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            out_path = os.path.join("outputs", "backend", "reply", f"{username}_{ts}.mp3")
+            result = self.pipeline.run_from_text(
+                user_text=message,
+                history=history,
+                output_audio_path=None,
+                stream_to_console=False,
+                system_prompt=prompt,
+                enable_tts=False,
+            )
+            parsed_payload = self._try_parse_json(result.assistant_text)
+            tts_text, allow_tts = self._decide_tts_text(prompt_id, result.assistant_text, parsed_payload)
+            frontend_text = self._decide_frontend_text(prompt_id, result.assistant_text, parsed_payload)
 
-        audio_output_path = None
-        if with_audio and allow_tts and tts_text:
-            self.pipeline.tts.synthesize_to_file(tts_text, out_path)
-            audio_output_path = out_path
+            audio_output_path = None
+            if with_audio and allow_tts and tts_text:
+                self.pipeline.tts.synthesize_to_file(tts_text, out_path)
+                audio_output_path = out_path
 
-        return {
-            "asr_text": None,
-            "assistant_text": frontend_text,
-            "assistant_payload": parsed_payload,
-            "audio_output_path": audio_output_path,
-        }
+            return {
+                "asr_text": None,
+                "assistant_text": frontend_text,
+                "assistant_payload": parsed_payload,
+                "audio_output_path": audio_output_path,
+            }
 
     def voice_chat(
         self,
@@ -129,33 +141,35 @@ class VoiceAgentService:
         prompt: str | None = None,
         with_audio: bool = True,
     ) -> dict:
-        history = self._history(user_key)
-        self._compress_history_if_needed(history)
-        result = self.pipeline.run_from_audio(
-            audio_path=input_audio_path,
-            history=history,
-            output_audio_path=None,
-            language="zh_cn",
-            stream_to_console=False,
-            system_prompt=prompt,
-            enable_tts=False,
-        )
+        session_lock = self._get_session_lock(user_key)
+        with session_lock:
+            history = self._history(user_key)
+            self._compress_history_if_needed(history)
+            result = self.pipeline.run_from_audio(
+                audio_path=input_audio_path,
+                history=history,
+                output_audio_path=None,
+                language="zh_cn",
+                stream_to_console=False,
+                system_prompt=prompt,
+                enable_tts=False,
+            )
 
-        parsed_payload = self._try_parse_json(result.assistant_text)
-        tts_text, allow_tts = self._decide_tts_text(prompt_id, result.assistant_text, parsed_payload)
-        frontend_text = self._decide_frontend_text(prompt_id, result.assistant_text, parsed_payload)
+            parsed_payload = self._try_parse_json(result.assistant_text)
+            tts_text, allow_tts = self._decide_tts_text(prompt_id, result.assistant_text, parsed_payload)
+            frontend_text = self._decide_frontend_text(prompt_id, result.assistant_text, parsed_payload)
 
-        audio_final_path = None
-        if with_audio and allow_tts and tts_text and output_audio_path:
-            self.pipeline.tts.synthesize_to_file(tts_text, output_audio_path)
-            audio_final_path = output_audio_path
+            audio_final_path = None
+            if with_audio and allow_tts and tts_text and output_audio_path:
+                self.pipeline.tts.synthesize_to_file(tts_text, output_audio_path)
+                audio_final_path = output_audio_path
 
-        return {
-            "asr_text": result.user_text,
-            "assistant_text": frontend_text,
-            "assistant_payload": parsed_payload,
-            "audio_output_path": audio_final_path,
-        }
+            return {
+                "asr_text": result.user_text,
+                "assistant_text": frontend_text,
+                "assistant_payload": parsed_payload,
+                "audio_output_path": audio_final_path,
+            }
 
     @staticmethod
     def _try_parse_json(text: str) -> dict[str, Any] | None:

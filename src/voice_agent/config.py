@@ -26,7 +26,14 @@ class Settings:
     context_max_turns: int = int(os.getenv("CONTEXT_MAX_TURNS", "50"))
     memory_path: str = os.getenv("MEMORY_PATH", "memory/history.json")
     rag_enabled: bool = os.getenv("RAG_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
-    rag_db_path: str = os.getenv("RAG_DB_PATH", "memory/rag_knowledge.db")
+    rag_db_path: str = os.getenv("RAG_DB_PATH", "db/chroma")
+    rag_state_db_path: str = os.getenv("RAG_STATE_DB_PATH", "db/rag_sync_state.db")
+    rag_data_dir: str = os.getenv("RAG_DATA_DIR", "data")
+    rag_chunk_size: int = int(os.getenv("RAG_CHUNK_SIZE", "500"))
+    rag_chunk_overlap: int = int(os.getenv("RAG_CHUNK_OVERLAP", "80"))
+    embedding_model: str = os.getenv("EMBEDDING_MODEL", "")
+    embedding_model_url: str = os.getenv("EMBEDDING_MODEL_URL", "")
+    embedding_model_api: str = os.getenv("EMBEDDING_MODEL_API", "")
     rag_top_k: int = int(os.getenv("RAG_TOP_K", "3"))
     rag_max_context_chars: int = int(os.getenv("RAG_MAX_CONTEXT_CHARS", "1200"))
 

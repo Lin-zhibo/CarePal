@@ -2,3 +2,12 @@ start/
 img/
 outputs/
 memory/
+*/__pycache__
+log
+dataset
+db
+*/*/__pycache__
+models
+/doc/.env
+__pycache__
+util

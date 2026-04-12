@@ -27,6 +27,7 @@ from src.backend.schemas import (
 )
 from src.backend.services import UserService, VoiceAgentService, build_auth_response
 from src.OCR_agent.service import OCRMultiAgentService
+from src.RAG.dbinit import sync_rag_knowledge_on_startup
 
 
 settings = get_backend_settings()
@@ -65,6 +66,7 @@ app = FastAPI(title=settings.app_name, version=settings.app_version, debug=setti
 def startup_event() -> None:
     os.makedirs("outputs/backend/uploads", exist_ok=True)
     os.makedirs("outputs/backend/reply", exist_ok=True)
+    sync_rag_knowledge_on_startup()
 
 
 @app.get("/health", response_model=HealthResponse)

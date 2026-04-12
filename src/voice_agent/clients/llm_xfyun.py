@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Dict, Generator, List
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class XFYunLLMClient:
@@ -27,8 +30,11 @@ class XFYunLLMClient:
             "stream": True,
         }
 
+        logger.info("Calling LLM, model name: %s", self.domain)
+
         with requests.post(self.url, json=payload, headers=headers, stream=True, timeout=180) as resp:
             if resp.status_code != 200:
+                logger.error("LLM Client Error! Status: %s, Response: %s", resp.status_code, resp.text)
                 raise RuntimeError(f"LLM failed: {resp.status_code} {resp.text}")
 
             for raw in resp.iter_lines():

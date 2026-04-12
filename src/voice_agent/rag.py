@@ -16,6 +16,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from openai import OpenAIError
 from pydantic import SecretStr
 
 
@@ -346,6 +347,46 @@ class SimpleRAGStore:
             conn.execute("DELETE FROM rag_file_state WHERE file_path = ?", (file_path,))
             conn.commit()
 
+    @staticmethod
+    def _build_embedding_client(model_name: str, base_url: str, api_key: str) -> OpenAIEmbeddings:
+        """
+        Build an embedding client with backward-compatible argument fallbacks.
+
+        Args:
+            model_name (str): Embedding model name string.
+            base_url (str): Embedding service base URL.
+            api_key (str): Embedding service API key.
+
+        Returns:
+            OpenAIEmbeddings: Initialized embedding client.
+
+        The method tries multiple argument signatures to support different SDK/provider compat modes.
+        """
+
+        logger.info("Creating embedding client: model=%s base_url=%s", model_name, base_url)
+
+        try:
+            client = OpenAIEmbeddings(
+                model=model_name,
+                api_key=SecretStr(api_key),
+                base_url=base_url,
+                check_embedding_ctx_length=False,
+                chunk_size=10,
+            )
+            logger.info("Embedding client created with compatibility options enabled.")
+            return client
+        except TypeError:
+            logger.warning(
+                "Embedding client does not accept compatibility options, falling back to basic init."
+            )
+            client = OpenAIEmbeddings(
+                model=model_name,
+                api_key=SecretStr(api_key),
+                base_url=base_url,
+            )
+            logger.info("Embedding client created with basic options.")
+            return client
+
     def _get_embeddings(self) -> OpenAIEmbeddings:
         """
         Lazily build and cache embedding client from configuration.
@@ -360,6 +401,7 @@ class SimpleRAGStore:
         """
 
         if self._embeddings is not None:
+            logger.debug("Reusing cached embedding client, model name: %s", self.embedding_model)
             return self._embeddings
 
         if not self.embedding_model or not self.embedding_base_url or not self.embedding_api_key:
@@ -368,10 +410,12 @@ class SimpleRAGStore:
                 "Please set EMBEDDING_MODEL, EMBEDDING_MODEL_URL, and EMBEDDING_MODEL_API."
             )
 
-        self._embeddings = OpenAIEmbeddings(
-            model=self.embedding_model,
-            api_key=SecretStr(self.embedding_api_key),
+        logger.info("Initializing OpenAIEmbeddings, model name: %s", self.embedding_model)
+
+        self._embeddings = self._build_embedding_client(
+            model_name=self.embedding_model,
             base_url=self.embedding_base_url,
+            api_key=self.embedding_api_key,
         )
         return self._embeddings
 
@@ -507,8 +551,60 @@ class SimpleRAGStore:
             persist_directory=str(dataset_dir),
             embedding_function=self._get_embeddings(),
         )
+        logger.info(
+            "Calling embedding model for indexing: file=%s chunks=%d model=%s",
+            relative_file_path,
+            len(chunked_documents),
+            self.embedding_model,
+        )
         vector_store.add_documents(chunked_documents)
+        logger.info(
+            "RAG file index built successfully: file=%s dataset_dir=%s chunks=%d",
+            relative_file_path,
+            dataset_dir,
+            len(chunked_documents),
+        )
         return str(dataset_dir), len(chunked_documents)
+
+    def _reset_all_vector_datasets(self) -> None:
+        """
+        Remove all previous vector datasets and clear the persisted sync state table.
+
+        Args:
+            None: This method has no external input parameters.
+
+        Returns:
+            None: Deletes old per-file vector stores and resets tracking records.
+
+        The reset runs before startup indexing to enforce full rebuild behavior.
+        """
+
+        self.db_path.mkdir(parents=True, exist_ok=True)
+
+        for child in self.db_path.iterdir():
+            try:
+                resolved_child = child.resolve()
+                resolved_state = self.state_db_path.resolve()
+                if resolved_child == resolved_state:
+                    continue
+            except OSError:
+                logger.exception("Failed to resolve path during vector reset: %s", child)
+                continue
+
+            try:
+                if child.is_dir():
+                    shutil.rmtree(child, ignore_errors=True)
+                else:
+                    child.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Failed to remove vector dataset path: %s", child)
+
+        with sqlite3.connect(str(self.state_db_path)) as conn:
+            conn.execute("DELETE FROM rag_file_state")
+            conn.commit()
+
+        logger.info("Cleared previous vector datasets under: %s", self.db_path)
+        logger.info("Cleared RAG sync state table in: %s", self.state_db_path)
 
     def sync_data_directory(self, data_dir: str) -> SyncReport:
         """
@@ -526,6 +622,14 @@ class SimpleRAGStore:
         current_files = self._scan_json_files(data_dir)
         previous_state = self._load_state_map()
 
+        logger.info(
+            "Starting full RAG rebuild on startup: files=%d data_dir=%s db_path=%s",
+            len(current_files),
+            data_dir,
+            self.db_path,
+        )
+        self._reset_all_vector_datasets()
+
         report = SyncReport(
             added_files=[],
             updated_files=[],
@@ -534,18 +638,7 @@ class SimpleRAGStore:
             indexed_chunks=0,
         )
 
-        previous_paths = set(previous_state.keys())
         current_paths = set(current_files.keys())
-
-        removed_paths = sorted(previous_paths - current_paths)
-        for relative_path in removed_paths:
-            state = previous_state[relative_path]
-            removed_dataset_dir = Path(state.dataset_dir)
-            if removed_dataset_dir.exists():
-                shutil.rmtree(removed_dataset_dir, ignore_errors=True)
-            self._delete_state_entry(relative_path)
-            report.removed_files.append(relative_path)
-
         for relative_path in sorted(current_paths):
             file_path = current_files[relative_path]
             try:
@@ -553,15 +646,6 @@ class SimpleRAGStore:
             except OSError:
                 logger.exception("Failed to hash file during RAG sync: %s", file_path)
                 report.skipped_files.append(relative_path)
-                continue
-
-            previous = previous_state.get(relative_path)
-            should_rebuild = (
-                previous is None
-                or previous.content_hash != content_hash
-                or not Path(previous.dataset_dir).exists()
-            )
-            if not should_rebuild:
                 continue
 
             try:
@@ -577,14 +661,33 @@ class SimpleRAGStore:
                     dataset_dir=indexed_dataset_dir,
                 )
                 report.indexed_chunks += chunk_count
-                if previous is None:
-                    report.added_files.append(relative_path)
-                else:
+                if relative_path in previous_state:
                     report.updated_files.append(relative_path)
-            except (json.JSONDecodeError, OSError, RuntimeError, ValueError, sqlite3.Error):
+                    change_type = "updated"
+                else:
+                    report.added_files.append(relative_path)
+                    change_type = "added"
+                logger.info(
+                    "RAG incremental build succeeded: file=%s type=%s chunks=%d dataset_dir=%s",
+                    relative_path,
+                    change_type,
+                    chunk_count,
+                    indexed_dataset_dir,
+                )
+            except (json.JSONDecodeError, OSError, RuntimeError, ValueError, sqlite3.Error, OpenAIError):
                 logger.exception("Failed to index file during RAG sync: %s", file_path)
                 report.skipped_files.append(relative_path)
 
+        report.removed_files.extend(sorted(set(previous_state.keys()) - current_paths))
+
+        logger.info(
+            "RAG sync summary: added=%d updated=%d removed=%d skipped=%d indexed_chunks=%d",
+            len(report.added_files),
+            len(report.updated_files),
+            len(report.removed_files),
+            len(report.skipped_files),
+            report.indexed_chunks,
+        )
         return report
 
     @staticmethod
@@ -660,7 +763,19 @@ class SimpleRAGStore:
             persist_directory=str(dataset_dir),
             embedding_function=self._get_embeddings(),
         )
+        logger.info(
+            "Calling embedding model for manual indexing: source=%s chunks=%d model=%s",
+            source,
+            len(chunked_documents),
+            self.embedding_model,
+        )
         vector_store.add_documents(chunked_documents)
+        logger.info(
+            "Manual RAG indexing succeeded: source=%s dataset_dir=%s chunks=%d",
+            source,
+            dataset_dir,
+            len(chunked_documents),
+        )
 
         digest = hashlib.md5("\n".join(doc.page_content for doc in chunked_documents).encode("utf-8")).hexdigest()
         self._upsert_state_entry(file_path=source, content_hash=digest, dataset_dir=str(dataset_dir))
@@ -731,6 +846,12 @@ class SimpleRAGStore:
             return []
 
         state_map = self._load_state_map()
+        logger.info(
+            "Starting RAG retrieval: query_len=%d top_k=%d datasets=%d",
+            len(query),
+            top_k,
+            len(state_map),
+        )
         aggregated: List[RetrievalItem] = []
         seq = 1
         per_dataset_k = max(1, top_k)
@@ -746,8 +867,19 @@ class SimpleRAGStore:
                     persist_directory=str(dataset_dir),
                     embedding_function=embeddings,
                 )
+                logger.info(
+                    "Calling embedding model for similarity search: dataset=%s source=%s k=%d",
+                    dataset_dir,
+                    file_path,
+                    per_dataset_k,
+                )
                 rows = vector_store.similarity_search_with_score(query, k=per_dataset_k)
-            except (RuntimeError, ValueError, OSError):
+                logger.info(
+                    "Similarity search succeeded: dataset=%s hits=%d",
+                    dataset_dir,
+                    len(rows),
+                )
+            except (RuntimeError, ValueError, OSError, OpenAIError):
                 logger.exception("RAG retrieval failed for dataset: %s", dataset_dir)
                 continue
 
@@ -780,6 +912,11 @@ class SimpleRAGStore:
             if len(unique) >= max(1, top_k):
                 break
 
+        logger.info(
+            "RAG retrieval completed: aggregated=%d returned=%d",
+            len(aggregated),
+            len(unique),
+        )
         return unique
 
     def build_context(self, query: str, top_k: int = 3, max_chars: int = 1200) -> str:

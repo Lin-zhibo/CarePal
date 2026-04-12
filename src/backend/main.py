@@ -31,10 +31,24 @@ from src.RAG.dbinit import sync_rag_knowledge_on_startup
 
 
 settings = get_backend_settings()
+
+os.makedirs("log", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("log/log.log", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+logger.info("Initializing database...")
 Base.metadata.create_all(bind=engine)
+logger.info("Database initialized.")
+
 voice_agent_service = VoiceAgentService()
 ocr_service = OCRMultiAgentService()
-logger = logging.getLogger(__name__)
 
 
 def _infer_audio_ext(filename: str | None, content_type: str | None, content: bytes) -> str:
@@ -64,9 +78,16 @@ app = FastAPI(title=settings.app_name, version=settings.app_version, debug=setti
 
 @app.on_event("startup")
 def startup_event() -> None:
+    logger.info("Starting up application...")
     os.makedirs("outputs/backend/uploads", exist_ok=True)
     os.makedirs("outputs/backend/reply", exist_ok=True)
-    sync_rag_knowledge_on_startup()
+    try:
+        logger.info("Syncing RAG knowledge...")
+        sync_rag_knowledge_on_startup()
+        logger.info("RAG knowledge sync completed successfully.")
+    except Exception as e:
+        logger.exception("Failed to sync RAG knowledge on startup.")
+        raise
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -76,17 +97,23 @@ def health() -> HealthResponse:
 
 @app.post("/auth/register", response_model=AuthResponse)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    logger.info("Registering new user: %s", payload.username)
     user = UserService.register(db, payload.username.strip(), payload.password)
     if user is None:
+        logger.warning("Registration failed: Username %s already exists", payload.username)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
+    logger.info("User registered successfully: %s", payload.username)
     return build_auth_response(user)
 
 
 @app.post("/auth/login", response_model=AuthResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    logger.info("User login attempt: %s", payload.username)
     user = UserService.login(db, payload.username.strip(), payload.password)
     if user is None:
+        logger.warning("Login failed for user: %s", payload.username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
+    logger.info("User logged in successfully: %s", payload.username)
     return build_auth_response(user)
 
 
@@ -95,11 +122,14 @@ async def chat_text(
     payload: TextChatRequest,
     auth: AuthContext = Depends(get_auth_context),
 ):
+    logger.info("Handling /chat/text request for user: %s (Prompt template: %s)", auth.user.username, payload.prompt)
     try:
         prompt_text = resolve_prompt(payload.prompt)
     except ValueError as e:
+        logger.error("Invalid prompt template ID: %s", payload.prompt)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
+    logger.info("Calling voice_agent_service.text_chat for user %s", auth.user.username)
     result = await run_in_threadpool(
         voice_agent_service.text_chat,
         auth.token,
@@ -109,6 +139,7 @@ async def chat_text(
         prompt_text,
         payload.with_audio,
     )
+    logger.info("Voice agent text_chat completed for user %s", auth.user.username)
     audio_file_url = None
     if payload.with_audio and result.get("audio_output_path"):
         audio_file_url = f"/chat/voice/file/{Path(result['audio_output_path']).name}"
@@ -139,8 +170,10 @@ async def chat_voice(
     with_audio: bool = Form(True),
     auth: AuthContext = Depends(get_auth_context),
 ):
+    logger.info("Handling /chat/voice request for user: %s (Prompt template: %s)", auth.user.username, prompt)
     content = await audio.read()
     if not content:
+        logger.warning("Empty audio upload from user %s", auth.user.username)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty audio file")
 
     ext = _infer_audio_ext(audio.filename, audio.content_type, content)
@@ -166,6 +199,7 @@ async def chat_voice(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     try:
+        logger.info("Calling voice_agent_service.voice_chat for user %s", auth.user.username)
         voice_result = await run_in_threadpool(
             voice_agent_service.voice_chat,
             auth.token,
@@ -176,6 +210,7 @@ async def chat_voice(
             prompt_text,
             with_audio,
         )
+        logger.info("Voice chat completed for user %s", auth.user.username)
     except (RuntimeError, ValueError) as e:
         logger.warning("/chat/voice bad request: %s", e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -225,7 +260,9 @@ async def ocr_analyze(
     with_audio: bool = Form(False),
     auth: AuthContext = Depends(get_auth_context),
 ):
+    logger.info("Handling /ocr/analyze request for user: %s (Images count: %d)", auth.user.username, len(images) if images else 0)
     if not images:
+        logger.warning("No images uploaded for OCR by user %s", auth.user.username)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No image files uploaded")
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -245,10 +282,13 @@ async def ocr_analyze(
         saved_paths.append(file_path)
 
     if not saved_paths:
+        logger.warning("All uploaded images were empty for user %s", auth.user.username)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All uploaded images are empty")
 
     try:
+        logger.info("Calling ocr_service.analyze_images for user %s with %d images", auth.user.username, len(saved_paths))
         result = await run_in_threadpool(ocr_service.analyze_images, auth.token, saved_paths, prompt)
+        logger.info("OCR analysis completed for user %s", auth.user.username)
     except Exception as e:
         logger.exception("/ocr/analyze failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e

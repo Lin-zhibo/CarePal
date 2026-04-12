@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 import threading
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ import requests
 
 from .config import create_client, get_ocr_settings
 from .prompts import AGENT_1_SYSTEM_PROMPT, AGENT_2_SYSTEM_PROMPT, AGENT_3_SYSTEM_PROMPT, DEFAULT_PROMPT
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -69,6 +72,7 @@ class OCRMultiAgentService:
                 reasoning_effort="medium",
             )
         except Exception as exc:
+            logger.exception("调用 OCR 视觉模型失败，出现完整异常: %s", exc)
             raise RuntimeError(f"调用模型失败：{exc}") from exc
         return _extract_message_text(response)
 
@@ -91,9 +95,12 @@ class OCRMultiAgentService:
             "stream": True,
         }
 
+        logger.info("Calling OCR LLM Agent, model name: %s", self.settings.llm_model_name)
+
         final_text = ""
         with requests.post(self.settings.xfyun_llm_url, headers=headers, json=payload, stream=True, timeout=180) as resp:
             if resp.status_code != 200:
+                logger.error("OCR llm agent (Agent2/3) 调用失败！状态码: %s, 错误报文: %s", resp.status_code, resp.text)
                 raise RuntimeError(f"调用 Agent2/3 LLM 失败: {resp.status_code} {resp.text}")
 
             for raw in resp.iter_lines():

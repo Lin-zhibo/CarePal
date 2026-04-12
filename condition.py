@@ -86,10 +86,13 @@ def check_fall(keypoints, bbox):
     width = xmax - xmin
     height = ymax - ymin
     
-    # if height > 0:
-    #     aspect_ratio = float(width) / float(height)
-    #     if aspect_ratio > 0.90:
-    #         return True, "Cond3(AspectRatio>0.9)"
+    # Check if all keypoints are valid (not occluded)
+    all_valid = all(kp[0] > 0 and kp[1] > 0 for kp in keypoints)
+    
+    if all_valid and height > 0:
+        aspect_ratio = float(width) / float(height)
+        if aspect_ratio > 0.90:
+            return True, "Cond3(AspectRatio>0.9)"
 
     # Check keypoint availability
     l_sh = keypoints[LEFT_SHOULDER][:2]

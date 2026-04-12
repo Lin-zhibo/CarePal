@@ -211,6 +211,17 @@ class VoiceAgentService:
         return None
 
     @staticmethod
+    def _looks_like_json_blob(text: str) -> bool:
+        t = (text or "").strip()
+        if not t:
+            return False
+        if (t.startswith("{") and t.endswith("}")) or (t.startswith("[") and t.endswith("]")):
+            return True
+        if "```json" in t or "\"intent\"" in t or "\"schedule_action\"" in t:
+            return True
+        return False
+
+    @staticmethod
     def _decide_tts_text(
         prompt_id: int | None,
         assistant_text: str,
@@ -226,9 +237,14 @@ class VoiceAgentService:
             reply_text = str(parsed_payload.get("reply_text", "")).strip()
             return (reply_text if reply_text else None), bool(reply_text)
 
-        # prompt 1 且解析失败时，为避免把结构化模板原文做TTS，默认不播报
+        # prompt 1 且解析失败时：
+        # - 若文本看起来仍是结构化JSON片段，继续禁播报，避免读出模板内容
+        # - 否则降级为自然语言播报，避免前端拿不到音频
         if prompt_id == 1 and not parsed_payload:
-            return None, False
+            if VoiceAgentService._looks_like_json_blob(assistant_text):
+                return None, False
+            fallback_text = assistant_text.strip()
+            return (fallback_text if fallback_text else None), bool(fallback_text)
 
         # 其他场景：优先播报 reply_text（若存在），否则播报原始文本
         if parsed_payload and isinstance(parsed_payload.get("reply_text"), str):

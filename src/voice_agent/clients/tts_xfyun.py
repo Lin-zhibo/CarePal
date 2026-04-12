@@ -86,6 +86,39 @@ class XFYunTTSClient:
         }
         return f"http://{self.host}{path}?{urlencode(params)}"
 
+    @staticmethod
+    def _strip_id3v2_header(mp3_bytes: bytes) -> bytes:
+        # 多段MP3直接拼接时，后续分段若保留ID3头会导致部分播放器识别异常。
+        if len(mp3_bytes) < 10 or mp3_bytes[:3] != b"ID3":
+            return mp3_bytes
+        tag_size = (
+            ((mp3_bytes[6] & 0x7F) << 21)
+            | ((mp3_bytes[7] & 0x7F) << 14)
+            | ((mp3_bytes[8] & 0x7F) << 7)
+            | (mp3_bytes[9] & 0x7F)
+        )
+        header_size = 10 + tag_size
+        if len(mp3_bytes) <= header_size:
+            return b""
+        return mp3_bytes[header_size:]
+
+    @staticmethod
+    def _merge_audio_parts(audio_parts: list[bytes], output_path: str) -> bytes:
+        if not audio_parts:
+            raise RuntimeError("TTS synthesized empty audio")
+
+        suffix = os.path.splitext(output_path)[1].lower()
+        if suffix == ".mp3" and len(audio_parts) > 1:
+            merged = bytearray(audio_parts[0])
+            for idx, part in enumerate(audio_parts[1:], start=2):
+                cleaned = XFYunTTSClient._strip_id3v2_header(part)
+                if not cleaned:
+                    raise RuntimeError(f"TTS segment {idx} is empty after ID3 cleanup")
+                merged.extend(cleaned)
+            return bytes(merged)
+
+        return b"".join(audio_parts)
+
     def _create_task(self, text: str) -> str:
         create_url = self._assemble_auth_url(self.create_path)
         txt = base64.encodebytes(text.encode("utf-8")).decode("utf-8")
@@ -184,12 +217,11 @@ class XFYunTTSClient:
                 raise RuntimeError(f"TTS download failed: {audio_resp.status_code} {audio_resp.text}")
             audio_parts.append(audio_resp.content)
 
-        # 如果文件已存在，报错提醒，不覆盖
-        if os.path.exists(output_path):
-            raise FileExistsError(f"文件已存在: {output_path}")
+        merged_audio = self._merge_audio_parts(audio_parts, output_path)
+        if not merged_audio:
+            raise RuntimeError("TTS merged audio is empty")
 
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         with open(output_path, "wb") as f:
-            for part in audio_parts:
-                f.write(part)
+            f.write(merged_audio)
         return output_path

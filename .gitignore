@@ -11,3 +11,4 @@ models
 /doc/.env
 __pycache__
 util
+test

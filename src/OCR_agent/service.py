@@ -1,25 +1,25 @@
 from __future__ import annotations
 
 import base64
-import json
-import logging
 import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import requests
-
 from .config import create_client, get_ocr_settings
-from .prompts import AGENT_1_SYSTEM_PROMPT, AGENT_2_SYSTEM_PROMPT, AGENT_3_SYSTEM_PROMPT, DEFAULT_PROMPT
-
-logger = logging.getLogger(__name__)
+from .prompts import DEFAULT_PROMPT, SINGLE_AGENT_SYSTEM_PROMPT
 
 
 @dataclass
 class OCRResult:
     text: str
+
+
+@dataclass
+class MergedAgentResult:
+    professional_analysis: str
+    plain_text: str
 
 
 def _get_image_type(path: Path) -> str:
@@ -51,6 +51,28 @@ def _extract_message_text(response: Any) -> str:
     return str(message_content).strip()
 
 
+def _extract_tagged_block(text: str, tag_name: str) -> str:
+    pattern = re.compile(rf"<{tag_name}>\s*(.*?)\s*</{tag_name}>", flags=re.IGNORECASE | re.DOTALL)
+    match = pattern.search(text)
+    return match.group(1).strip() if match else ""
+
+
+def _extract_heading_block(text: str, title: str, next_titles: tuple[str, ...]) -> str:
+    start_pattern = re.compile(rf"(?:^|\n)\s*【?{re.escape(title)}】?\s*[:：]?\s*", flags=re.IGNORECASE)
+    start_match = start_pattern.search(text)
+    if not start_match:
+        return ""
+
+    start = start_match.end()
+    end = len(text)
+    for next_title in next_titles:
+        next_pattern = re.compile(rf"(?:^|\n)\s*【?{re.escape(next_title)}】?\s*[:：]?\s*", flags=re.IGNORECASE)
+        next_match = next_pattern.search(text, pos=start)
+        if next_match:
+            end = min(end, next_match.start())
+    return text[start:end].strip()
+
+
 class OCRMultiAgentService:
     def __init__(self) -> None:
         self.settings = get_ocr_settings()
@@ -60,7 +82,6 @@ class OCRMultiAgentService:
         self._manager_lock = threading.RLock()
 
     def _run_agent(self, model_name: str, system_prompt: str, user_content: Any) -> str:
-        # Agent1：OCR视觉模型路径（支持 image_url 内容）
         try:
             response = self.client.chat.completions.create(
                 model=model_name,
@@ -72,62 +93,16 @@ class OCRMultiAgentService:
                 reasoning_effort="medium",
             )
         except Exception as exc:
-            logger.exception("调用 OCR 视觉模型失败，出现完整异常: %s", exc)
             raise RuntimeError(f"调用模型失败：{exc}") from exc
         return _extract_message_text(response)
 
-    def _run_llm_agent(self, system_prompt: str, user_text: str) -> str:
-        # Agent2/3：统一走后端通用 LLM_MODEL=4.0Ultra（讯飞HTTP流式接口）
-        if not self.settings.xfyun_llm_api_password:
-            raise RuntimeError("XFYUN_LLM_API_PASSWORD 未配置，无法调用 Agent2/3 LLM。")
-
-        headers = {
-            "Authorization": f"Bearer {self.settings.xfyun_llm_api_password}",
-            "content-type": "application/json",
-        }
-        payload = {
-            "model": self.settings.llm_model_name,
-            "user": "ocr_agent_user",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_text},
-            ],
-            "stream": True,
-        }
-
-        logger.info("Calling OCR LLM Agent, model name: %s", self.settings.llm_model_name)
-
-        final_text = ""
-        with requests.post(self.settings.xfyun_llm_url, headers=headers, json=payload, stream=True, timeout=180) as resp:
-            if resp.status_code != 200:
-                logger.error("OCR llm agent (Agent2/3) 调用失败！状态码: %s, 错误报文: %s", resp.status_code, resp.text)
-                raise RuntimeError(f"调用 Agent2/3 LLM 失败: {resp.status_code} {resp.text}")
-
-            for raw in resp.iter_lines():
-                if not raw:
-                    continue
-                line = raw.decode("utf-8", errors="ignore").strip()
-                if not line.startswith("data:"):
-                    continue
-
-                data_str = line[5:].strip()
-                if not data_str or data_str == "[DONE]":
-                    continue
-
-                try:
-                    obj = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-
-                delta = obj.get("choices", [{}])[0].get("delta", {})
-                content = delta.get("content", "")
-                if content:
-                    final_text += content
-
-        return final_text.strip()
-
-    def _build_image_content(self, image_paths: list[Path], prompt: str) -> list[dict]:
-        image_content: list[dict] = []
+    def _build_image_content(
+        self,
+        image_paths: list[Path],
+        prompt: str,
+        history_text: str = "",
+    ) -> list[dict[str, Any]]:
+        image_content: list[dict[str, Any]] = []
         for index, image_path in enumerate(image_paths, start=1):
             image_bytes = image_path.read_bytes()
             if not image_bytes:
@@ -142,15 +117,12 @@ class OCRMultiAgentService:
                 }
             )
 
-        image_content.append(
-            {
-                "type": "text",
-                "text": (
-                    f"用户补充信息：{prompt}\n"
-                    f"本次共提供 {len(image_paths)} 张图片，请综合所有图片内容，先完成药品图片关键信息提取。"
-                ),
-            }
-        )
+        text_parts = []
+        if history_text:
+            text_parts.append(f"以下是最近历史对话与分析，请结合理解，但优先回答本轮问题：\n{history_text}")
+        text_parts.append(f"用户本轮补充信息：{prompt}")
+        text_parts.append(f"本次共提供 {len(image_paths)} 张图片，请综合所有图片内容完成识别和分析。")
+        image_content.append({"type": "text", "text": "\n\n".join(text_parts)})
         return image_content
 
     def _history(self, session_key: str) -> list[dict[str, str]]:
@@ -168,60 +140,80 @@ class OCRMultiAgentService:
     @staticmethod
     def _format_history(history: list[dict[str, str]], max_turns: int = 6) -> str:
         if not history:
-            return "暂无历史对话。"
+            return ""
+
         selected_turns = history[-max_turns:]
         start_round = len(history) - len(selected_turns) + 1
         parts = []
         for round_number, turn in enumerate(selected_turns, start=start_round):
+            answer = turn.get("plain_text") or turn.get("analysis") or turn.get("professional_analysis") or ""
             parts.append(
-                f"第 {round_number} 轮用户输入：\n{turn['user']}\n\n"
-                f"第 {round_number} 轮 Agent 2 专业分析：\n{turn['agent_2']}"
+                f"第 {round_number} 轮用户输入：\n{turn.get('user', '')}\n\n"
+                f"第 {round_number} 轮回复：\n{answer}"
             )
         return "\n\n".join(parts)
+
+    @staticmethod
+    def _parse_merged_agent_response(text: str) -> MergedAgentResult:
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+        professional_analysis = _extract_tagged_block(normalized, "professional_analysis")
+        plain_text = _extract_tagged_block(normalized, "plain_text")
+
+        if not professional_analysis and not plain_text:
+            professional_analysis = _extract_heading_block(normalized, "专业分析", ("简明说明", "通俗说明"))
+            plain_text = _extract_heading_block(normalized, "简明说明", ()) or _extract_heading_block(
+                normalized,
+                "通俗说明",
+                (),
+            )
+
+        if not professional_analysis and plain_text:
+            professional_analysis = plain_text
+        if not plain_text and professional_analysis:
+            plain_text = professional_analysis
+        if not professional_analysis and not plain_text:
+            professional_analysis = normalized
+            plain_text = normalized
+
+        return MergedAgentResult(
+            professional_analysis=professional_analysis.strip(),
+            plain_text=plain_text.strip(),
+        )
+
+    @staticmethod
+    def _clean_final_text(text: str) -> str:
+        if not text:
+            return ""
+
+        cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
+        cleaned = cleaned.replace("*", "")
+        cleaned = cleaned.replace("`", "")
+        cleaned = re.sub(r"[ \t]+", " ", cleaned)
+        cleaned = re.sub(r" *\n *", "\n", cleaned)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
 
     def analyze_images(self, session_key: str, image_paths: list[Path], prompt: str | None = None) -> OCRResult:
         session_lock = self._get_session_lock(session_key)
         with session_lock:
             user_prompt = (prompt or "").strip() or DEFAULT_PROMPT
-            image_content = self._build_image_content(image_paths, user_prompt)
-
-            agent_1_result = self._run_agent(self.settings.agent_1_model_name, AGENT_1_SYSTEM_PROMPT, image_content)
             history = self._history(session_key)
+            history_text = self._format_history(history)
+            image_content = self._build_image_content(image_paths, user_prompt, history_text)
 
-            agent_2_input = (
-                "以下是 Agent 1 当前提取到的药品关键信息，请始终以此为基础分析：\n\n"
-                f"{agent_1_result}\n\n"
-                "以下是最近的历史对话，请结合上下文理解用户当前问题：\n\n"
-                f"{self._format_history(history)}\n\n"
-                "以下是用户本轮最新输入，请优先回答这一次的问题；如果信息不足，请提出最关键的追问：\n\n"
-                f"{user_prompt}"
+            result_text = self._run_agent(
+                self.settings.agent_1_model_name,
+                SINGLE_AGENT_SYSTEM_PROMPT,
+                image_content,
             )
-            agent_2_result = self._run_llm_agent(AGENT_2_SYSTEM_PROMPT, agent_2_input)
+            parsed_result = self._parse_merged_agent_response(result_text)
 
-            agent_3_input = (
-                f"用户本轮最新输入：{user_prompt}\n\n"
-                "请把下面这段专业说明改写得更通俗易懂，但不要新增事实或改变结论：\n\n"
-                f"{agent_2_result}"
+            history.append(
+                {
+                    "user": user_prompt,
+                    "analysis": parsed_result.professional_analysis,
+                    "plain_text": parsed_result.plain_text,
+                }
             )
-            agent_3_result = self._run_llm_agent(AGENT_3_SYSTEM_PROMPT, agent_3_input)
-
-            history.append({"user": user_prompt, "agent_2": agent_2_result, "agent_3": agent_3_result})
-            cleaned = self._clean_agent3_text(agent_3_result)
+            cleaned = self._clean_final_text(parsed_result.plain_text)
             return OCRResult(text=cleaned)
-
-    @staticmethod
-    def _clean_agent3_text(text: str) -> str:
-        if not text:
-            return ""
-
-        cleaned = text.replace("\r", "\n")
-        cleaned = cleaned.replace("【", "").replace("】", "")
-        cleaned = cleaned.replace("*", "")
-        cleaned = cleaned.replace("`", "")
-        cleaned = re.sub(r"\n+", "。", cleaned)
-        cleaned = re.sub(r"\s+", " ", cleaned)
-        cleaned = cleaned.replace(" .", "。")
-        cleaned = cleaned.strip(" 。")
-        if cleaned:
-            cleaned += "。"
-        return cleaned

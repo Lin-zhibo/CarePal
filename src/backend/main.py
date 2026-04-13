@@ -8,24 +8,26 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from src.backend.config import get_backend_settings
-from src.backend.db import Base, engine, get_db
+from src.backend.db import Base, SessionLocal, engine, get_db
 from src.backend.deps import AuthContext, get_auth_context, get_current_user
 from src.backend.models import User
 from src.backend.prompt_templates import resolve_prompt
 from src.backend.schemas import (
     AuthResponse,
+    EmergencyContactInfoResponse,
     HealthResponse,
     LoginRequest,
+    OCRAnalyzeResponse,
     RegisterRequest,
     TextChatRequest,
     TextChatResponse,
     VoiceChatMetaResponse,
-    OCRAnalyzeResponse,
 )
-from src.backend.services import UserService, VoiceAgentService, build_auth_response
+from src.backend.services import EmergencyAlertService, UserService, VoiceAgentService, build_auth_response
 from src.OCR_agent.service import OCRMultiAgentService
 from src.RAG.dbinit import sync_rag_knowledge_on_startup
 
@@ -49,6 +51,61 @@ logger.info("Database initialized.")
 
 voice_agent_service = VoiceAgentService()
 ocr_service = OCRMultiAgentService()
+emergency_alert_service = EmergencyAlertService(
+    host=settings.alert_listener_host,
+    port=settings.alert_listener_port,
+    trigger_keyword=settings.alert_trigger_keyword,
+    email_subject=settings.alert_email_subject,
+    email_body=settings.alert_email_body,
+    smtp_host=settings.smtp_host,
+    smtp_port=settings.smtp_port,
+    smtp_username=settings.smtp_username,
+    smtp_password=settings.smtp_password,
+    smtp_sender_email=settings.smtp_sender_email,
+    smtp_use_tls=settings.smtp_use_tls,
+    smtp_use_ssl=settings.smtp_use_ssl,
+)
+
+
+def _ensure_user_contact_columns() -> None:
+    inspector = inspect(engine)
+    existing_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "emergency_contact_name" not in existing_columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN emergency_contact_name VARCHAR(128)"))
+    if "emergency_contact_email" not in existing_columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN emergency_contact_email VARCHAR(255)"))
+
+
+def _resolve_alert_target_by_token(token: str) -> dict[str, str | None] | None:
+    if not token:
+        return None
+
+    db = SessionLocal()
+    try:
+        from jose import JWTError, jwt
+
+        try:
+            payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+            username = payload.get("sub")
+        except JWTError:
+            return None
+
+        if not username:
+            return None
+
+        user = db.query(User).filter(User.username == username).first()
+        if user is None:
+            return None
+
+        return {
+            "username": user.username,
+            "emergency_contact_name": user.emergency_contact_name,
+            "emergency_contact_email": user.emergency_contact_email,
+        }
+    finally:
+        db.close()
 
 
 def _infer_audio_ext(filename: str | None, content_type: str | None, content: bytes) -> str:
@@ -79,8 +136,10 @@ app = FastAPI(title=settings.app_name, version=settings.app_version, debug=setti
 @app.on_event("startup")
 def startup_event() -> None:
     logger.info("Starting up application...")
+    _ensure_user_contact_columns()
     os.makedirs("outputs/backend/uploads", exist_ok=True)
     os.makedirs("outputs/backend/reply", exist_ok=True)
+    emergency_alert_service.start_listener(_resolve_alert_target_by_token)
     try:
         logger.info("Syncing RAG knowledge...")
         sync_rag_knowledge_on_startup()
@@ -98,7 +157,13 @@ def health() -> HealthResponse:
 @app.post("/auth/register", response_model=AuthResponse)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     logger.info("Registering new user: %s", payload.username)
-    user = UserService.register(db, payload.username.strip(), payload.password)
+    user = UserService.register(
+        db,
+        payload.username.strip(),
+        payload.password,
+        payload.emergency_contact_name.strip(),
+        payload.emergency_contact_email.strip(),
+    )
     if user is None:
         logger.warning("Registration failed: Username %s already exists", payload.username)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
@@ -115,6 +180,14 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
     logger.info("User logged in successfully: %s", payload.username)
     return build_auth_response(user)
+
+
+@app.get("/auth/emergency-contact", response_model=EmergencyContactInfoResponse)
+def get_emergency_contact(auth: AuthContext = Depends(get_auth_context), db: Session = Depends(get_db)):
+    info = UserService.get_emergency_contact(db, auth.user.username)
+    if info is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return EmergencyContactInfoResponse(**info)
 
 
 @app.post("/chat/text", response_model=TextChatResponse)
@@ -300,7 +373,6 @@ async def ocr_analyze(
             await run_in_threadpool(voice_agent_service.pipeline.tts.synthesize_to_file, result.text, audio_path)
             ocr_audio_url = f"/chat/voice/file/{Path(audio_path).name}"
         except Exception as e:
-            logger.exception("/ocr/analyze tts failed")
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"OCR文本转语音失败: {e}") from e
+            logger.warning("/ocr/analyze tts failed, fallback to text-only response: %s", e)
 
     return OCRAnalyzeResponse(text=result.text, audio_file_url=ocr_audio_url)

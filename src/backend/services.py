@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import smtplib
+import socket
 import threading
 from datetime import datetime
+from email.message import EmailMessage
 from typing import Any
 from typing import Dict, List
 
@@ -16,13 +20,27 @@ from .models import User
 from .security import create_access_token, hash_password, verify_password
 
 
+logger = logging.getLogger(__name__)
+
+
 class UserService:
     @staticmethod
-    def register(db: Session, username: str, password: str):
+    def register(
+        db: Session,
+        username: str,
+        password: str,
+        emergency_contact_name: str,
+        emergency_contact_email: str,
+    ):
         exists = db.query(User).filter(User.username == username).first()
         if exists:
             return None
-        user = User(username=username, password_hash=hash_password(password))
+        user = User(
+            username=username,
+            password_hash=hash_password(password),
+            emergency_contact_name=emergency_contact_name,
+            emergency_contact_email=emergency_contact_email,
+        )
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -36,6 +54,176 @@ class UserService:
         if not verify_password(password, user.password_hash):
             return None
         return user
+
+    @staticmethod
+    def get_emergency_contact(db: Session, username: str) -> dict[str, str | None] | None:
+        user = db.query(User).filter(User.username == username).first()
+        if user is None:
+            return None
+        return {
+            "emergency_contact_name": user.emergency_contact_name,
+            "emergency_contact_email": user.emergency_contact_email,
+        }
+
+
+class EmergencyAlertService:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        trigger_keyword: str,
+        email_subject: str,
+        email_body: str,
+        smtp_host: str,
+        smtp_port: int,
+        smtp_username: str,
+        smtp_password: str,
+        smtp_sender_email: str,
+        smtp_use_tls: bool,
+        smtp_use_ssl: bool,
+    ) -> None:
+        self.host = host
+        self.port = port
+        self.trigger_keyword = trigger_keyword
+        self.email_subject = email_subject
+        self.email_body = email_body
+        self.smtp_host = smtp_host
+        self.smtp_port = smtp_port
+        self.smtp_username = smtp_username
+        self.smtp_password = smtp_password
+        self.smtp_sender_email = smtp_sender_email
+        self.smtp_use_tls = smtp_use_tls
+        self.smtp_use_ssl = smtp_use_ssl
+
+    def start_listener(self, resolve_alert_target_by_token) -> threading.Thread | None:
+        if self.port <= 0:
+            logger.info("Emergency alert listener is disabled because ALERT_LISTENER_PORT <= 0")
+            return None
+
+        thread = threading.Thread(
+            target=self._listen_loop,
+            args=(resolve_alert_target_by_token,),
+            daemon=True,
+            name="emergency-alert-listener",
+        )
+        thread.start()
+        logger.info("Emergency alert listener started at %s:%s", self.host, self.port)
+        return thread
+
+    @staticmethod
+    def _parse_bool(value: Any, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        return default
+
+    def _parse_listener_payload(self, payload: str) -> dict[str, Any] | None:
+        stripped = payload.strip()
+        if not stripped:
+            return None
+
+        data: dict[str, Any]
+        try:
+            parsed = json.loads(stripped)
+            data = parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            data = {"token": stripped}
+
+        token = str(data.get("token", "")).strip()
+        if not token:
+            return None
+
+        message_type = str(data.get("type", "")).strip()
+        if message_type and message_type != "emergency_fall_alert":
+            return None
+
+        return data
+
+    def _listen_loop(self, resolve_alert_target_by_token) -> None:
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((self.host, self.port))
+        server.listen(5)
+
+        while True:
+            conn, addr = server.accept()
+            with conn:
+                try:
+                    data = conn.recv(4096)
+                    if not data:
+                        continue
+                    raw_payload = data.decode("utf-8", errors="ignore")
+                    parsed_payload = self._parse_listener_payload(raw_payload)
+                    if not parsed_payload:
+                        logger.warning("Emergency alert payload is invalid or trigger mismatch from %s", addr)
+                        continue
+
+                    token = str(parsed_payload.get("token", "")).strip()
+                    alert_target = resolve_alert_target_by_token(token)
+                    if not alert_target:
+                        logger.warning("Emergency alert ignored because token has no matching user. from=%s", addr)
+                        continue
+
+                    self.send_alert_email(alert_target, parsed_payload)
+                except Exception as exc:
+                    logger.exception("Emergency alert listener failed to handle request from %s: %s", addr, exc)
+
+    def send_alert_email(self, alert_target: dict[str, str | None], payload_overrides: dict[str, Any] | None = None) -> None:
+        recipient = (alert_target.get("emergency_contact_email") or "").strip()
+        contact_name = (alert_target.get("emergency_contact_name") or "").strip() or "紧急联系人"
+        username = (alert_target.get("username") or "").strip() or "该用户"
+
+        if not recipient:
+            logger.warning("Emergency alert skipped because recipient email is empty. user=%s", username)
+            return
+
+        raw_overrides = payload_overrides or {}
+        nested_overrides = raw_overrides.get("smtp_override") if isinstance(raw_overrides, dict) else None
+        if isinstance(nested_overrides, dict):
+            overrides = {**raw_overrides, **nested_overrides}
+        else:
+            overrides = raw_overrides
+
+        smtp_host = str(overrides.get("smtp_host", self.smtp_host) or "").strip()
+        smtp_port = int(overrides.get("smtp_port", self.smtp_port) or self.smtp_port)
+        smtp_username = str(overrides.get("smtp_username", self.smtp_username) or "").strip()
+        smtp_password = str(overrides.get("smtp_password", self.smtp_password) or "").strip()
+        smtp_sender_email = str(overrides.get("smtp_sender_email", self.smtp_sender_email) or "").strip()
+        smtp_use_tls = self._parse_bool(overrides.get("smtp_use_tls"), self.smtp_use_tls)
+        smtp_use_ssl = self._parse_bool(overrides.get("smtp_use_ssl"), self.smtp_use_ssl)
+
+        if not smtp_host or not smtp_sender_email:
+            logger.warning("Emergency alert skipped because smtp_host or smtp_sender_email is empty")
+            return
+
+        message = EmailMessage()
+        message["From"] = smtp_sender_email
+        message["To"] = recipient
+        message["Subject"] = self.email_subject or "CarePal 紧急提醒"
+        message_template = self.email_body or "（{contact_name}）你好，你家里的老人（{username}）可能刚才跌倒了，请尽快打电话确认老人情况！！！"
+        try:
+            message_body = message_template.format(contact_name=contact_name, username=username)
+        except Exception:
+            message_body = message_template
+        message.set_content(message_body)
+
+        if smtp_use_ssl:
+            smtp_client = smtplib.SMTP_SSL
+        else:
+            smtp_client = smtplib.SMTP
+
+        with smtp_client(smtp_host, smtp_port, timeout=20) as server:
+            if (not smtp_use_ssl) and smtp_use_tls:
+                server.starttls()
+            if smtp_username and smtp_password:
+                server.login(smtp_username, smtp_password)
+            server.send_message(message)
+        logger.info("Emergency alert email sent successfully. user=%s recipient=%s", username, recipient)
 
 
 class VoiceAgentService:

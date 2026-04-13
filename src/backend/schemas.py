@@ -14,6 +14,8 @@ class HealthResponse(BaseModel):
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=6, max_length=128)
+    emergency_contact_name: str = Field(min_length=1, max_length=128)
+    emergency_contact_email: str = Field(min_length=3, max_length=255)
 
 
 class LoginRequest(BaseModel):
@@ -25,6 +27,11 @@ class UserInfo(BaseModel):
     id: int
     username: str
     created_at: datetime
+
+
+class EmergencyContactInfoResponse(BaseModel):
+    emergency_contact_name: str | None = None
+    emergency_contact_email: str | None = None
 
 
 class AuthResponse(BaseModel):

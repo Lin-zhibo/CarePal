@@ -12,6 +12,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--base-url", default="http://127.0.0.1:8000")
     p.add_argument("--username", default="ocr_demo_user")
     p.add_argument("--password", default="demo_pass_123")
+    p.add_argument("--emergency-contact-name", default="OCR Demo Contact")
+    p.add_argument("--emergency-contact-email", default="ocr_demo_user@example.com")
     p.add_argument("--images", required=True, help="图片路径，多个用逗号分隔")
     p.add_argument("--prompt", default="请识别药品并分析与帕金森病关系")
     p.add_argument("--output", default="outputs/ocr_result.json")
@@ -22,16 +24,31 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def ensure_auth(base_url: str, username: str, password: str) -> str:
-    payload = {"username": username, "password": password}
-    reg = requests.post(f"{base_url}/auth/register", json=payload, timeout=30)
+def ensure_auth(
+    base_url: str,
+    username: str,
+    password: str,
+    emergency_contact_name: str,
+    emergency_contact_email: str,
+) -> str:
+    register_payload = {
+        "username": username,
+        "password": password,
+        "emergency_contact_name": emergency_contact_name,
+        "emergency_contact_email": emergency_contact_email,
+    }
+    login_payload = {"username": username, "password": password}
+
+    reg = requests.post(f"{base_url}/auth/register", json=register_payload, timeout=30)
     if reg.status_code == 200:
         return reg.json()["access_token"]
     if reg.status_code == 409:
-        login = requests.post(f"{base_url}/auth/login", json=payload, timeout=30)
+        login = requests.post(f"{base_url}/auth/login", json=login_payload, timeout=30)
         if login.status_code != 200:
             raise RuntimeError(f"登录失败: {login.status_code} {login.text}")
         return login.json()["access_token"]
+    if reg.status_code == 422:
+        raise RuntimeError(f"注册参数校验失败(请检查紧急联系人字段): {reg.status_code} {reg.text}")
     raise RuntimeError(f"注册失败: {reg.status_code} {reg.text}")
 
 
@@ -44,7 +61,13 @@ def main() -> None:
         if not p.exists():
             raise FileNotFoundError(f"图片不存在: {p}")
 
-    token = ensure_auth(args.base_url, args.username, args.password)
+    token = ensure_auth(
+        args.base_url,
+        args.username,
+        args.password,
+        args.emergency_contact_name,
+        args.emergency_contact_email,
+    )
     headers = {"Authorization": f"Bearer {token}"}
 
     if args.health_check:

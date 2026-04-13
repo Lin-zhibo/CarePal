@@ -110,10 +110,10 @@ class XFYunTTSClient:
         suffix = os.path.splitext(output_path)[1].lower()
         if suffix == ".mp3" and len(audio_parts) > 1:
             merged = bytearray(audio_parts[0])
-            for idx, part in enumerate(audio_parts[1:], start=2):
+            for part in audio_parts[1:]:
                 cleaned = XFYunTTSClient._strip_id3v2_header(part)
                 if not cleaned:
-                    raise RuntimeError(f"TTS segment {idx} is empty after ID3 cleanup")
+                    continue
                 merged.extend(cleaned)
             return bytes(merged)
 

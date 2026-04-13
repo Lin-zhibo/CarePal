@@ -55,12 +55,13 @@ Return:
   tuple: A valid (x, y) point, or None if both are invalid (0, 0).
 Description: Helper to get the center of two points or fallback to one of them if the other is occluded.
 """
-def get_valid_point(kp_list, idx1, idx2):
-    p1 = kp_list[idx1][:2]
-    p2 = kp_list[idx2][:2]
+def get_valid_point(kp_list, idx1, idx2, conf_threshold=0.5):
+    p1 = kp_list[idx1]
+    p2 = kp_list[idx2]
     
-    v1_valid = (p1[0] > 0 and p1[1] > 0)
-    v2_valid = (p2[0] > 0 and p2[1] > 0)
+    # Check if confidence score is available and above threshold, otherwise fallback to x,y > 0
+    v1_valid = (p1[2] > conf_threshold) if len(p1) > 2 else (p1[0] > 0 and p1[1] > 0)
+    v2_valid = (p2[2] > conf_threshold) if len(p2) > 2 else (p2[0] > 0 and p2[1] > 0)
     
     if v1_valid and v2_valid:
         return ((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
@@ -80,14 +81,14 @@ Return:
   tuple: (bool, str) - True if fall detected, along with the triggered condition string (e.g., "Cond3"), (False, "") otherwise.
 Description: Evaluates 5 specific geometrical conditions based on body keypoints to detect if a person has fallen.
 """
-def check_fall(keypoints, bbox):
+def check_fall(keypoints, bbox, conf_threshold=0.5):
     # Cond 3: Aspect ratio of bounding box
     xmin, ymin, xmax, ymax = bbox
     width = xmax - xmin
     height = ymax - ymin
     
-    # Check if all keypoints are valid (not occluded)
-    all_valid = all(kp[0] > 0 and kp[1] > 0 for kp in keypoints)
+    # Check if all keypoints are valid (not occluded), using confidence if available
+    all_valid = all((kp[2] > conf_threshold if len(kp) > 2 else (kp[0] > 0 and kp[1] > 0)) for kp in keypoints)
     
     if all_valid and height > 0:
         aspect_ratio = float(width) / float(height)
@@ -95,18 +96,23 @@ def check_fall(keypoints, bbox):
             return True, "Cond3(AspectRatio>0.9)"
 
     # Check keypoint availability
-    l_sh = keypoints[LEFT_SHOULDER][:2]
-    r_sh = keypoints[RIGHT_SHOULDER][:2]
-    l_knee = keypoints[LEFT_KNEE][:2]
-    r_knee = keypoints[RIGHT_KNEE][:2]
+    l_sh = keypoints[LEFT_SHOULDER]
+    r_sh = keypoints[RIGHT_SHOULDER]
+    l_knee = keypoints[LEFT_KNEE]
+    r_knee = keypoints[RIGHT_KNEE]
     
-    sh_valid = (l_sh[0] > 0 and l_sh[1] > 0) and (r_sh[0] > 0 and r_sh[1] > 0)
-    knee_valid = (l_knee[0] > 0 and l_knee[1] > 0) and (r_knee[0] > 0 and r_knee[1] > 0)
+    l_sh_valid = (l_sh[2] > conf_threshold) if len(l_sh) > 2 else (l_sh[0] > 0 and l_sh[1] > 0)
+    r_sh_valid = (r_sh[2] > conf_threshold) if len(r_sh) > 2 else (r_sh[0] > 0 and r_sh[1] > 0)
+    l_knee_valid = (l_knee[2] > conf_threshold) if len(l_knee) > 2 else (l_knee[0] > 0 and l_knee[1] > 0)
+    r_knee_valid = (r_knee[2] > conf_threshold) if len(r_knee) > 2 else (r_knee[0] > 0 and r_knee[1] > 0)
     
-    c_ankle = get_valid_point(keypoints, LEFT_ANKLE, RIGHT_ANKLE)
-    c_hip = get_valid_point(keypoints, LEFT_HIP, RIGHT_HIP)
-    c_sh = get_valid_point(keypoints, LEFT_SHOULDER, RIGHT_SHOULDER)
-    c_knee = get_valid_point(keypoints, LEFT_KNEE, RIGHT_KNEE)
+    sh_valid = l_sh_valid and r_sh_valid
+    knee_valid = l_knee_valid and r_knee_valid
+    
+    c_ankle = get_valid_point(keypoints, LEFT_ANKLE, RIGHT_ANKLE, conf_threshold)
+    c_hip = get_valid_point(keypoints, LEFT_HIP, RIGHT_HIP, conf_threshold)
+    c_sh = get_valid_point(keypoints, LEFT_SHOULDER, RIGHT_SHOULDER, conf_threshold)
+    c_knee = get_valid_point(keypoints, LEFT_KNEE, RIGHT_KNEE, conf_threshold)
 
     # Cond 1: Shoulder y vs Ankle y
     if sh_valid and c_ankle is not None:

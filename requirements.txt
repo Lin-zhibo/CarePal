@@ -1,0 +1,11 @@
+# YOLO and AI modelling
+ultralytics
+
+# Image Processing and Computer Vision
+opencv-python
+
+# Math and Matrices
+numpy
+
+# Used for downloading datasets (script/downloadKaggleDataset.py)
+kagglehub

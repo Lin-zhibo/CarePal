@@ -3,3 +3,15 @@ dataset
 log/*
 util
 __pycache__
+start/
+img/
+outputs/
+memory/
+*/__pycache__
+dataset
+db
+*/*/__pycache__
+models
+/doc/.env
+test
+tmp

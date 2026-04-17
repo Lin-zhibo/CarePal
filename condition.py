@@ -90,10 +90,12 @@ def check_fall(keypoints, bbox, conf_threshold=0.5):
     # Check if all keypoints are valid (not occluded), using confidence if available
     all_valid = all((kp[2] > conf_threshold if len(kp) > 2 else (kp[0] > 0 and kp[1] > 0)) for kp in keypoints)
     
+    all_valid = 1 # delete condition: all keypoints are valid.
+    
     if all_valid and height > 0:
         aspect_ratio = float(width) / float(height)
-        if aspect_ratio > 0.90:
-            return True, "Cond3(AspectRatio>0.9)"
+        if aspect_ratio > 1.20:
+            return True, "Cond3(AspectRatio>1.2)"
 
     # Check keypoint availability
     l_sh = keypoints[LEFT_SHOULDER]

@@ -8,6 +8,7 @@ import os
 
 settings = get_backend_settings()
 
+# SQLite 文件模式下，确保数据库目录存在，避免首次启动失败。
 if settings.database_url.startswith("sqlite:///"):
     db_path = settings.database_url.replace("sqlite:///", "")
     if db_path and db_path != ":memory:":
@@ -15,12 +16,14 @@ if settings.database_url.startswith("sqlite:///"):
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
 
+# SQLite 需要 check_same_thread=False，便于在多线程请求中复用连接。
 engine = create_engine(settings.database_url, connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
 def get_db():
+    # FastAPI 依赖：每个请求拿一个会话，请求结束后关闭。
     db = SessionLocal()
     try:
         yield db

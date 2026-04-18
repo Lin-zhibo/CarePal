@@ -1,1 +1,4 @@
-"""Voice agent package."""
+"""语音能力模块。
+
+包含 ASR、LLM、TTS 以及 RAG 检索增强相关代码。
+"""

@@ -33,6 +33,7 @@ def _resolve_project_path(raw_path: str) -> str:
 
 
 def sync_rag_knowledge_on_startup() -> SyncReport | None:
+    # 后端启动时调用：把 data 目录内容同步到向量库。
     """
     Perform incremental RAG synchronization during backend startup.
 

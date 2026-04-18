@@ -1,1 +1,1 @@
-"""Provider clients for ASR / LLM / TTS."""
+"""语音供应商客户端集合（ASR / LLM / TTS）。"""

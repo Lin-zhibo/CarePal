@@ -18,6 +18,7 @@ settings = get_backend_settings()
 
 @dataclass
 class AuthContext:
+    # 在同一个依赖里同时返回 user 和原始 token，便于下游复用。
     user: User
     token: str
 
@@ -26,6 +27,7 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
+    # 纯用户依赖：适合只需要当前用户对象的接口。
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
 
@@ -49,6 +51,7 @@ def get_auth_context(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
 ) -> AuthContext:
+    # 扩展依赖：除了用户对象，还返回 token（给会话隔离或审计使用）。
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
 

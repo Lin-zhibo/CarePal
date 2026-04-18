@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+# 统一在这里加载环境变量，后端各模块都从同一份配置读取。
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
 load_dotenv(ROOT_DIR / "doc" / ".env")
@@ -14,18 +15,25 @@ load_dotenv(ROOT_DIR / "doc" / ".env")
 
 @dataclass
 class BackendSettings:
+    # 应用基础信息
     app_name: str = os.getenv("APP_NAME", "voice-agent-backend")
     app_version: str = os.getenv("APP_VERSION", "1.0.0")
     debug: bool = os.getenv("DEBUG", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+    # 数据库与鉴权
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///memory/backend.db")
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "change-this-in-prod")
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
     jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+
+    # 紧急告警监听配置（TCP）
     alert_listener_host: str = os.getenv("ALERT_LISTENER_HOST", "127.0.0.1")
     alert_listener_port: int = int(os.getenv("ALERT_LISTENER_PORT", "0"))
     alert_trigger_keyword: str = os.getenv("ALERT_TRIGGER_KEYWORD", "")
     alert_email_subject: str = os.getenv("ALERT_EMAIL_SUBJECT", "")
     alert_email_body: str = os.getenv("ALERT_EMAIL_BODY", "")
+
+    # SMTP 邮件发送配置
     smtp_host: str = os.getenv("SMTP_HOST", "")
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
     smtp_username: str = os.getenv("SMTP_USERNAME", "")

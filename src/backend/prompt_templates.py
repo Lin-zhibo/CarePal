@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 
+# 统一维护后端可选 Prompt 模板，前端通过 prompt_id 选择。
 PROMPT_TEMPLATES: dict[int, str] = {
     1: """你是康复陪伴助手。你会收到用户输入，任务分两类：
 1. 普通健康对话
@@ -158,6 +159,7 @@ PROMPT_TEMPLATES: dict[int, str] = {
 
 
 def resolve_prompt(prompt_id: int | None) -> str | None:
+    # None 代表走默认系统提示词，不注入业务模板。
     if prompt_id is None:
         return None
     if prompt_id not in PROMPT_TEMPLATES:

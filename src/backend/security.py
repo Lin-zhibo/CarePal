@@ -15,6 +15,7 @@ settings = get_backend_settings()
 
 
 def hash_password(password: str) -> str:
+    # 统一哈希入口，便于后续替换算法时只改一个位置。
     return pwd_context.hash(password)
 
 
@@ -23,6 +24,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(username: str) -> str:
+    # token 只放最小必要信息：用户标识和过期时间。
     expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {"sub": username, "exp": expire}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)

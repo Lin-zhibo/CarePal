@@ -1,1 +1,4 @@
-"""Root package for source modules."""
+"""src 根包。
+
+用于组织后端 API、语音链路、OCR 和 RAG 相关代码。
+"""

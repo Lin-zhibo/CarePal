@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 
+# OCR 模块独立读取配置，避免和其他模块耦合。
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
 load_dotenv(ROOT_DIR / "doc" / ".env")
@@ -15,6 +16,7 @@ load_dotenv(ROOT_DIR / "doc" / ".env")
 
 @dataclass
 class OCRSettings:
+    # 当前 OCR 只使用一个视觉模型完成识别+分析。
     base_url: str = os.getenv("OCR_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
     api_key_direct: str = os.getenv("OCR_API_KEY", "")
     agent_1_model_name: str = os.getenv("OCR_AGENT_1_MODEL", "doubao-seed-2-0-pro-260215")
@@ -29,6 +31,7 @@ def get_ocr_settings() -> OCRSettings:
 
 
 def create_client(settings: OCRSettings) -> OpenAI:
+    # 支持直填 key，兼容旧配置中的“环境变量名或误填真实 key”场景。
     api_key = (settings.api_key_direct or "").strip()
     if not api_key:
         env_name = (settings.api_key_env_var or "").strip()

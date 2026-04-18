@@ -1,1 +1,4 @@
-"""Backend application package."""
+"""后端 API 包。
+
+主要包含鉴权、对话、OCR、紧急告警等业务入口。
+"""

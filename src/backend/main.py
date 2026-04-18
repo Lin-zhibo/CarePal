@@ -49,6 +49,7 @@ logger.info("Initializing database...")
 Base.metadata.create_all(bind=engine)
 logger.info("Database initialized.")
 
+# 这些 service 在进程启动时初始化，全局复用。
 voice_agent_service = VoiceAgentService()
 ocr_service = OCRMultiAgentService()
 emergency_alert_service = EmergencyAlertService(
@@ -68,6 +69,7 @@ emergency_alert_service = EmergencyAlertService(
 
 
 def _ensure_user_contact_columns() -> None:
+    # 轻量迁移：老库里若没有紧急联系人字段，启动时补齐。
     inspector = inspect(engine)
     existing_columns = {column["name"] for column in inspector.get_columns("users")}
     if "emergency_contact_name" not in existing_columns:
@@ -79,6 +81,7 @@ def _ensure_user_contact_columns() -> None:
 
 
 def _resolve_alert_target_by_token(token: str) -> dict[str, str | None] | None:
+    # 从 token 解析用户，再查到其紧急联系人信息。
     if not token:
         return None
 
@@ -109,6 +112,7 @@ def _resolve_alert_target_by_token(token: str) -> dict[str, str | None] | None:
 
 
 def _infer_audio_ext(filename: str | None, content_type: str | None, content: bytes) -> str:
+    # 文件后缀 + content-type + 魔数三重判断，尽量识别真实音频格式。
     if filename:
         suffix = Path(filename).suffix.lower()
         if suffix in {".wav", ".mp3"}:
@@ -141,6 +145,7 @@ def startup_event() -> None:
     os.makedirs("outputs/backend/reply", exist_ok=True)
     emergency_alert_service.start_listener(_resolve_alert_target_by_token)
     try:
+        # 服务启动时同步 RAG，避免知识库与本地文件不一致。
         logger.info("Syncing RAG knowledge...")
         sync_rag_knowledge_on_startup()
         logger.info("RAG knowledge sync completed successfully.")

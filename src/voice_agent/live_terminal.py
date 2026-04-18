@@ -16,6 +16,7 @@ from .utils import ensure_parent_dir
 
 @dataclass
 class MicRecordConfig:
+    # 麦克风自动录音参数：阈值、静音判停、最长录制时长等。
     sample_rate: int = 16000
     frame_ms: int = 30
     threshold: float = 0.015
@@ -26,6 +27,7 @@ class MicRecordConfig:
 
 
 class MicAutoRecorder:
+    # 自动起停录音器：检测到语音后录制，静音后自动结束。
     def __init__(self, config: MicRecordConfig) -> None:
         self.config = config
 
@@ -122,6 +124,7 @@ def run_live_terminal(
     silence_seconds: float = 1.0,
     max_record_seconds: float = 20.0,
 ) -> None:
+    # 实时终端模式：循环录音 -> 识别 -> 回复 -> 可选自动播放。
     recorder = MicAutoRecorder(
         MicRecordConfig(
             threshold=mic_threshold,

@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class UserService:
+    # 账号相关的数据库读写逻辑，和路由层解耦。
     @staticmethod
     def register(
         db: Session,
@@ -67,6 +68,7 @@ class UserService:
 
 
 class EmergencyAlertService:
+    # 监听 TCP 告警并发送紧急联系人邮件。
     def __init__(
         self,
         host: str,
@@ -123,6 +125,7 @@ class EmergencyAlertService:
         return default
 
     def _parse_listener_payload(self, payload: str) -> dict[str, Any] | None:
+        # 兼容两种输入：JSON 报文 / 直接传 token 字符串。
         stripped = payload.strip()
         if not stripped:
             return None
@@ -145,6 +148,7 @@ class EmergencyAlertService:
         return data
 
     def _listen_loop(self, resolve_alert_target_by_token) -> None:
+        # 常驻循环：单连接读取单条报文，处理完成后关闭连接。
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((self.host, self.port))
@@ -227,6 +231,7 @@ class EmergencyAlertService:
 
 
 class VoiceAgentService:
+    # 对 VoicePipeline 做会话级封装，管理历史和并发锁。
     def __init__(self) -> None:
         self.settings = get_settings()
         self.pipeline = VoicePipeline(self.settings)

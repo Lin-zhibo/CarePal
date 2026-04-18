@@ -19,6 +19,7 @@ from websocket import WebSocketApp
 
 
 class XFYunASRClient:
+    # 讯飞实时 ASR 客户端：负责音频分帧发送和结果拼接。
     STATUS_FIRST_FRAME = 0
     STATUS_CONTINUE_FRAME = 1
     STATUS_LAST_FRAME = 2
@@ -154,6 +155,8 @@ class XFYunASRClient:
         raise RuntimeError("当前ASR客户端支持 .wav（raw）和 .mp3（lame）")
 
     def transcribe_file(self, audio_path: str, language: Optional[str] = None) -> str:
+        # [AI生成代码-接口暴露部分]
+        # 该方法被后端 API 通过语音编排链路直接调用，属于对上层暴露的 ASR 能力入口。
         if not self.app_id:
             raise ValueError("XFYUN_APP_ID is missing")
         if not self.api_key:

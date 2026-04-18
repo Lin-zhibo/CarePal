@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+# 这里集中定义 HTTP 请求/响应模型，避免在路由里写散落的 dict 结构。
 class HealthResponse(BaseModel):
     status: str
     app: str
@@ -12,6 +13,7 @@ class HealthResponse(BaseModel):
 
 
 class RegisterRequest(BaseModel):
+    # 注册阶段要求补齐紧急联系人，后续跌倒告警会直接使用这两项。
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=6, max_length=128)
     emergency_contact_name: str = Field(min_length=1, max_length=128)

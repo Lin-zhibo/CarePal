@@ -24,6 +24,7 @@ class PipelineResult:
 
 
 class VoicePipeline:
+    # 语音主编排：ASR -> LLM -> TTS，并可按开关拼接 RAG 上下文。
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.asr = XFYunASRClient(
@@ -49,11 +50,13 @@ class VoicePipeline:
         self.rag_store = SimpleRAGStore(settings.rag_db_path)
 
     def _ensure_system(self, history: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        # 保证历史第 1 条是 system，避免模型上下文漂移。
         if history and history[0].get("role") == "system":
             return history
         return [{"role": "system", "content": SYSTEM_PROMPT}] + history
 
     def _build_user_content_with_rag(self, user_text: str) -> str:
+        # 开启 RAG 时，在用户问题前附加检索到的知识片段。
         if not self.settings.rag_enabled:
             return user_text
 
@@ -80,6 +83,7 @@ class VoicePipeline:
         system_prompt: str | None = None,
         enable_tts: bool = True,
     ) -> PipelineResult:
+        # 文本入口：共用同一套历史、提示词、流式输出逻辑。
         user_text = user_text.strip()
         if not user_text:
             raise ValueError("user_text is empty")
@@ -135,6 +139,7 @@ class VoicePipeline:
         system_prompt: str | None = None,
         enable_tts: bool = True,
     ) -> PipelineResult:
+        # 音频入口：先 ASR，再复用 run_from_text。
         user_text = self.asr.transcribe_file(audio_path=audio_path, language=language)
         return self.run_from_text(
             user_text=user_text,

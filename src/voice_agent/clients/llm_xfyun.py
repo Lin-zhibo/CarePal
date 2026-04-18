@@ -10,12 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 class XFYunLLMClient:
+    # 讯飞大模型流式客户端：逐段产出回复文本。
     def __init__(self, api_password: str, domain: str = "4.0Ultra") -> None:
         self.api_password = api_password
         self.domain = domain
         self.url = "https://spark-api-open.xf-yun.com/v1/chat/completions"
 
     def stream_chat(self, messages: List[Dict[str, str]]) -> Generator[str, None, None]:
+        # [AI生成代码-接口暴露部分]
+        # 该方法是后端对话 API 实际依赖的 LLM 暴露接口，按流式方式向上层输出文本片段。
         if not self.api_password:
             raise ValueError("XFYUN_LLM_API_PASSWORD is missing")
 

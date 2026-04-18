@@ -1,5 +1,6 @@
 DEFAULT_PROMPT = "请识别这张药品图片，并判断它与帕金森病的关系。"
 
+# 单 Agent 提示词：约束输出为 professional_analysis + plain_text 双块。
 SINGLE_AGENT_SYSTEM_PROMPT = """
 你是 OCR 药品分析 Agent。请直接根据用户提供的药品图片、历史对话信息和本轮补充信息，完成药品识别，并分析它与帕金森病的关系。若有多张图片，请综合判断。只根据图片中可见信息和用户已提供信息作答，不要编造；不清楚时明确写“不确定”。
 

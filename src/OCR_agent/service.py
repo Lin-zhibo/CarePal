@@ -13,11 +13,13 @@ from .prompts import DEFAULT_PROMPT, SINGLE_AGENT_SYSTEM_PROMPT
 
 @dataclass
 class OCRResult:
+    # 对外只暴露给前端展示用的文本。
     text: str
 
 
 @dataclass
 class MergedAgentResult:
+    # 模型双输出结构：专业分析 + 面向用户说明。
     professional_analysis: str
     plain_text: str
 
@@ -74,6 +76,7 @@ def _extract_heading_block(text: str, title: str, next_titles: tuple[str, ...]) 
 
 
 class OCRMultiAgentService:
+    # 名称历史保留，当前实现已经是单 Agent。
     def __init__(self) -> None:
         self.settings = get_ocr_settings()
         self.client = create_client(self.settings)
@@ -102,6 +105,7 @@ class OCRMultiAgentService:
         prompt: str,
         history_text: str = "",
     ) -> list[dict[str, Any]]:
+        # OpenAI 多模态消息：图片逐张拼接，文本放在最后统一描述任务。
         image_content: list[dict[str, Any]] = []
         for index, image_path in enumerate(image_paths, start=1):
             image_bytes = image_path.read_bytes()
@@ -139,6 +143,7 @@ class OCRMultiAgentService:
 
     @staticmethod
     def _format_history(history: list[dict[str, str]], max_turns: int = 6) -> str:
+        # 仅截取最近几轮历史，减少 token 压力。
         if not history:
             return ""
 
@@ -155,6 +160,7 @@ class OCRMultiAgentService:
 
     @staticmethod
     def _parse_merged_agent_response(text: str) -> MergedAgentResult:
+        # 先按标签解析，失败再用标题和全文兜底。
         normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
         professional_analysis = _extract_tagged_block(normalized, "professional_analysis")
         plain_text = _extract_tagged_block(normalized, "plain_text")
@@ -194,6 +200,8 @@ class OCRMultiAgentService:
         return cleaned.strip()
 
     def analyze_images(self, session_key: str, image_paths: list[Path], prompt: str | None = None) -> OCRResult:
+        # [AI生成代码-接口暴露部分]
+        # 该方法是后端 /ocr/analyze 路由直接调用的 OCR 暴露接口。
         session_lock = self._get_session_lock(session_key)
         with session_lock:
             user_prompt = (prompt or "").strip() or DEFAULT_PROMPT

@@ -1,1 +1,4 @@
-"""OCR multi-agent pipeline package."""
+"""OCR 模块。
+
+当前使用单 Agent 实现药品识别与帕金森相关分析。
+"""

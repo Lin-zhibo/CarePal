@@ -15,6 +15,7 @@ import requests
 
 
 class XFYunTTSClient:
+    # 讯飞 TTS 客户端：提交任务、轮询结果、下载并合并音频。
     def __init__(
         self,
         app_id: str,
@@ -195,6 +196,8 @@ class XFYunTTSClient:
         raise RuntimeError(f"TTS query timeout: waited {max_wait}s, last task_status={last_status}")
 
     def synthesize_to_file(self, text: str, output_path: str) -> str:
+        # [AI生成代码-接口暴露部分]
+        # 该方法是后端语音回复/OCR配音环节直接调用的 TTS 暴露接口。
         if not self.app_id:
             raise ValueError("XFYUN_APP_ID is missing")
         if not self.api_key:

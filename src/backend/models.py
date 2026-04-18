@@ -9,6 +9,7 @@ from src.backend.db import Base
 
 
 class User(Base):
+    # 系统当前唯一核心业务表：用户账号 + 紧急联系人信息。
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

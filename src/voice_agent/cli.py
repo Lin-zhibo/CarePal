@@ -12,6 +12,7 @@ from .utils import ensure_parent_dir, load_history, save_history
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    # 本地调试入口：支持单音频、交互文本、实时麦克风三种模式。
     parser = argparse.ArgumentParser(description="ASR + LLM + TTS voice agent CLI")
     parser.add_argument("--audio", type=str, default="", help="Input audio file path")
     parser.add_argument("--output", type=str, default="", help="Output audio file path")
@@ -85,6 +86,7 @@ def interactive_loop(pipeline: VoicePipeline, history: List[Dict[str, str]]) -> 
 
 
 def main() -> None:
+    # CLI 主流程：加载配置/历史，执行模式，退出时保存历史。
     args = build_arg_parser().parse_args()
     settings = get_settings()
     pipeline = VoicePipeline(settings)

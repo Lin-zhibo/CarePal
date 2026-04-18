@@ -24,7 +24,7 @@
     <view class="carepal-shell">
       <view :class="['carepal-main', sidebarExpanded ? 'is-sidebar-expanded' : 'is-sidebar-collapsed']">
         <view class="carepal-sidebar-handle carepal-sidebar-handle--collapsed">
-          <var-button
+          <button
             size="small"
             plain
             class="carepal-sidebar-toggle carepal-sidebar-toggle--hint"
@@ -32,12 +32,12 @@
           >
             <view :class="['carepal-sidebar-toggle-icon', sidebarExpanded ? 'is-open' : '']"></view>
             <view class="carepal-sidebar-toggle-text">展开</view>
-          </var-button>
+          </button>
         </view>
         <view class="carepal-main-left">
           <view class="carepal-sidebar">
             <view class="carepal-sidebar-handle carepal-sidebar-handle--expanded">
-              <var-button
+              <button
                 size="small"
                 plain
                 class="carepal-sidebar-toggle carepal-sidebar-toggle--hint"
@@ -45,7 +45,7 @@
               >
                 <view :class="['carepal-sidebar-toggle-icon', sidebarExpanded ? 'is-open' : '']"></view>
                 <view class="carepal-sidebar-toggle-text">收起</view>
-              </var-button>
+              </button>
             </view>
             <view class="carepal-sidebar-identity" @tap="openLoginDialog">
               <image
@@ -59,7 +59,7 @@
               </view>
             </view>
             <view class="carepal-sidebar-title">功能模块</view>
-            <var-button
+            <button
               v-for="item in modules"
               :key="item.key"
               block
@@ -92,7 +92,7 @@
                   <view class="carepal-nav-desc">{{ item.desc }}</view>
                 </view>
               </view>
-            </var-button>
+            </button>
           </view>
         </view>
 
@@ -163,17 +163,16 @@
 
             <view class="carepal-chat-input">
               <view class="carepal-chat-input-row">
-                <var-button
+                <button
                   type="primary"
                   round
                   class="carepal-chat-mic"
                   color="linear-gradient(135deg, #ff7a7a 0%, #ffb347 100%)"
                   text-color="#ffffff"
                   @tap.stop="onMicModeTrigger"
-                  @click.stop="onMicModeTrigger"
                 >
                   {{ chatInputMode === 'text' ? '🎤' : '⌨' }}
-                </var-button>
+                </button>
                 <view v-if="chatInputMode === 'text'" class="carepal-chat-input-main">
                   <textarea
                     class="carepal-chat-textarea"
@@ -190,13 +189,10 @@
                   @touchstart.stop.prevent="onVoiceHoldStart"
                   @touchend.stop.prevent="onVoiceHoldEnd"
                   @touchcancel.stop.prevent="onVoiceHoldCancel"
-                  @mousedown.stop.prevent="onVoiceHoldStart"
-                  @mouseup.stop.prevent="onVoiceHoldEnd"
-                  @mouseleave.stop.prevent="onVoiceHoldCancel"
                 >
                   {{ isRecording ? '松开发送语音' : '长按输入语音' }}
                 </view>
-                <var-button
+                <button
                   v-if="chatInputMode === 'text'"
                   type="primary"
                   size="small"
@@ -204,7 +200,7 @@
                   @tap="onSend"
                 >
                   发送
-                </var-button>
+                </button>
               </view>
               <view class="carepal-chat-mic-status">{{ recordingStatusText }}</view>
             </view>
@@ -218,8 +214,8 @@
                   maxlength="-1"
                 ></textarea>
                 <view class="carepal-chat-copy-actions">
-                  <var-button size="small" type="primary" @tap="copyTextContentNow">复制全文</var-button>
-                  <var-button size="small" plain @tap="closeCopyTextPanel">关闭</var-button>
+                  <button size="small" type="primary" @tap="copyTextContentNow">复制全文</button>
+                  <button size="small" plain @tap="closeCopyTextPanel">关闭</button>
                 </view>
               </view>
             </view>
@@ -276,16 +272,16 @@
               <view class="carepal-calendar-header">
                 <view class="carepal-calendar-title">服药月历表</view>
                 <view class="carepal-calendar-controls">
-                  <var-button size="mini" plain class="carepal-calendar-btn" @tap="goPrevMonth">上月</var-button>
-                  <var-button size="mini" class="carepal-calendar-btn" @tap="goCurrentMonth">当月</var-button>
+                  <button size="mini" plain class="carepal-calendar-btn" @tap="goPrevMonth">上月</button>
+                  <button size="mini" class="carepal-calendar-btn" @tap="goCurrentMonth">当月</button>
                 </view>
               </view>
               <view class="carepal-calendar-subtitle">{{ calendarMonthLabel }}</view>
 
               <view class="carepal-calendar-year-head">
-                <var-button size="mini" plain class="carepal-calendar-btn" @tap="goPrevYear">上一年</var-button>
+                <button size="mini" plain class="carepal-calendar-btn" @tap="goPrevYear">上一年</button>
                 <view class="carepal-calendar-year-title">{{ currentCalendarYear }} 年月历记录</view>
-                <var-button size="mini" plain class="carepal-calendar-btn" @tap="goNextYear">下一年</var-button>
+                <button size="mini" plain class="carepal-calendar-btn" @tap="goNextYear">下一年</button>
               </view>
               <view class="carepal-calendar-year-grid">
                 <view
@@ -314,9 +310,9 @@
                 <view class="carepal-calendar-drawer-header">
                   <view class="carepal-calendar-title">服药日历表 · {{ calendarMonthLabel }}</view>
                   <view class="carepal-calendar-controls">
-                    <var-button size="mini" plain class="carepal-calendar-btn" @tap="goPrevMonth">上月</var-button>
-                    <var-button size="mini" class="carepal-calendar-btn" @tap="goCurrentMonth">当月</var-button>
-                    <var-button size="mini" plain class="carepal-calendar-btn" @tap="closeCalendarDrawer">关闭</var-button>
+                    <button size="mini" plain class="carepal-calendar-btn" @tap="goPrevMonth">上月</button>
+                    <button size="mini" class="carepal-calendar-btn" @tap="goCurrentMonth">当月</button>
+                    <button size="mini" plain class="carepal-calendar-btn" @tap="closeCalendarDrawer">关闭</button>
                   </view>
                 </view>
   
@@ -364,8 +360,8 @@
                   :placeholder="`请输入${scheduleEditLabel}`"
                 />
                 <view class="carepal-schedule-edit-actions">
-                  <var-button size="small" plain @tap="closeScheduleFieldEditor">取消</var-button>
-                  <var-button size="small" type="primary" @tap="confirmScheduleFieldEdit">保存</var-button>
+                  <button size="small" plain @tap="closeScheduleFieldEditor">取消</button>
+                  <button size="small" type="primary" @tap="confirmScheduleFieldEdit">保存</button>
                 </view>
               </view>
             </view>
@@ -380,8 +376,8 @@
             <view :class="['carepal-ocr-layout', ocrInputMode === 'camera' && ocrCameraVisible ? 'is-camera-live' : '']">
               <view class="carepal-ocr-left">
                 <view class="carepal-ocr-actions">
-                  <var-button :type="ocrInputMode === 'album' ? 'primary' : 'default'" class="carepal-ocr-btn" @tap="setOcrInputMode('album')">上传照片</var-button>
-                  <var-button :type="ocrInputMode === 'camera' ? 'primary' : 'default'" class="carepal-ocr-btn" @tap="setOcrInputMode('camera')">拍照识别</var-button>
+                  <button :type="ocrInputMode === 'album' ? 'primary' : 'default'" class="carepal-ocr-btn" @tap="setOcrInputMode('album')">上传照片</button>
+                  <button :type="ocrInputMode === 'camera' ? 'primary' : 'default'" class="carepal-ocr-btn" @tap="setOcrInputMode('camera')">拍照识别</button>
                 </view>
 
                 <view class="carepal-ocr-drop" @tap="onOcrDropTap">
@@ -394,8 +390,8 @@
                       muted
                     ></video>
                     <view class="carepal-ocr-camera-actions">
-                      <var-button plain class="carepal-camera-btn" @tap.stop="closeOcrCamera">取消</var-button>
-                      <var-button type="primary" class="carepal-camera-btn" @tap.stop="captureOcrPhoto">拍照</var-button>
+                      <button plain class="carepal-camera-btn" @tap.stop="closeOcrCamera">取消</button>
+                      <button type="primary" class="carepal-camera-btn" @tap.stop="captureOcrPhoto">拍照</button>
                     </view>
                   </view>
                   <view class="carepal-ocr-drop-inner" v-else-if="ocrImageUrl">
@@ -415,19 +411,19 @@
                 </view>
 
                 <view class="carepal-ocr-submit-row">
-                  <var-button
+                  <button
                     type="primary"
                     class="carepal-ocr-submit-btn"
                     :disabled="!ocrImageUrl || ocrSubmitting"
                     :loading="ocrSubmitting"
                     @tap="submitOcrAnalyze(false)"
-                  >开始识别</var-button>
-                  <var-button
+                  >开始识别</button>
+                  <button
                     plain
                     class="carepal-ocr-submit-btn"
                     :disabled="!ocrImageUrl || ocrSubmitting"
                     @tap="submitOcrAnalyze(true)"
-                  >识别并朗读</var-button>
+                  >识别并朗读</button>
                 </view>
               </view>
 
@@ -471,7 +467,7 @@
               </view>
 
               <view class="carepal-weekly-page-tabs">
-                <var-button
+                <button
                   v-for="(page, pageIndex) in weeklyQuestionnairePages"
                   :key="'weekly-page-tab-' + pageIndex"
                   size="small"
@@ -490,7 +486,7 @@
                   @tap="switchWeeklyPage(pageIndex)"
                 >
                   {{ page.title }}
-                </var-button>
+                </button>
               </view>
 
               <view class="carepal-weekly-page-head">
@@ -504,7 +500,7 @@
                     <view class="carepal-weekly-score-title">{{ question.code }} {{ question.title }}</view>
                     <view class="carepal-weekly-score-prompt">{{ question.prompt }}</view>
                     <view class="carepal-weekly-score-options">
-                      <var-button
+                      <button
                         v-for="option in question.options"
                         :key="'q' + question.id + '-opt-' + option.score"
                         size="mini"
@@ -523,7 +519,7 @@
                         @tap="setWeeklyManualScore(question.id, option.score)"
                       >
                         {{ option.score }}分
-                      </var-button>
+                      </button>
                     </view>
                     <view class="carepal-weekly-score-desc" v-if="weeklyManualForm.scores[question.id] !== null">
                       当前：{{ question.options[weeklyManualForm.scores[question.id]].label }}
@@ -533,20 +529,20 @@
               </transition>
 
               <view class="carepal-weekly-page-actions">
-                <var-button
+                <button
                   size="small"
                   plain
                   class="carepal-weekly-page-action-btn"
                   :disabled="activeWeeklyPageIndex === 0"
                   @tap="goPrevWeeklyPage"
-                >上一页</var-button>
-                <var-button
+                >上一页</button>
+                <button
                   size="small"
                   plain
                   class="carepal-weekly-page-action-btn"
                   :disabled="activeWeeklyPageIndex >= weeklyQuestionnairePages.length - 1"
                   @tap="goNextWeeklyPage"
-                >下一页</var-button>
+                >下一页</button>
               </view>
 
               <view class="carepal-weekly-form-item">
@@ -558,7 +554,7 @@
                   maxlength="1000"
                 ></textarea>
               </view>
-              <var-button type="primary" class="carepal-weekly-submit" @tap="submitWeeklyQuestionnaireToAi">提交问卷，交由 AI 生成周报告</var-button>
+              <button type="primary" class="carepal-weekly-submit" @tap="submitWeeklyQuestionnaireToAi">提交问卷，交由 AI 生成周报告</button>
               <view class="carepal-weekly-file-name" v-if="weeklyAiSubmitHint">{{ weeklyAiSubmitHint }}</view>
             </view>
 
@@ -581,17 +577,17 @@
                 <view class="carepal-monitor-card">
                   <view class="carepal-monitor-card-title">检测控制</view>
                   <view class="carepal-monitor-actions">
-                    <var-button type="primary" class="carepal-monitor-btn" @tap="toggleMonitorCamera">
+                    <button type="primary" class="carepal-monitor-btn" @tap="toggleMonitorCamera">
                       {{ monitorCameraVisible ? '关闭摄像头' : '打开摄像头' }}
-                    </var-button>
-                    <var-button
+                    </button>
+                    <button
                       class="carepal-monitor-btn"
                       :type="monitorDetecting ? 'danger' : 'default'"
                       :disabled="!monitorCameraVisible"
                       @tap="toggleMonitorDetecting"
                     >
                       {{ monitorDetecting ? '停止检测' : '开始检测' }}
-                    </var-button>
+                    </button>
                   </view>
 
                   <view class="carepal-monitor-status-row">
@@ -653,7 +649,7 @@
                     :src="profile.avatar || '/static/icons/profile.svg'"
                     mode="aspectFill"
                   />
-                  <var-button size="small" class="carepal-profile-btn" @tap="onPickAvatar">更换</var-button>
+                  <button size="small" class="carepal-profile-btn" @tap="onPickAvatar">更换</button>
                 </view>
               </view>
 
@@ -661,9 +657,9 @@
                 <view class="carepal-profile-label">名字</view>
                 <view class="carepal-profile-control carepal-profile-control--edit" @tap.stop>
                     <template v-if="editField === 'name'">
-                    <var-input v-model="editValue" placeholder="请输入名字" />
-                    <var-button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</var-button>
-                    <var-button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</var-button>
+                    <input v-model="editValue" placeholder="请输入名字" />
+                    <button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</button>
+                    <button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</button>
                   </template>
                   <template v-else>
                     <view class="carepal-profile-value carepal-profile-value--click" @tap="beginEdit('name')">
@@ -677,9 +673,9 @@
                 <view class="carepal-profile-label">绑定手机号</view>
                 <view class="carepal-profile-control carepal-profile-control--edit" @tap.stop>
                   <template v-if="editField === 'phone'">
-                    <var-input v-model="editValue" type="number" maxlength="11" placeholder="请输入手机号" />
-                    <var-button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</var-button>
-                    <var-button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</var-button>
+                    <input v-model="editValue" type="number" maxlength="11" placeholder="请输入手机号" />
+                    <button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</button>
+                    <button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</button>
                   </template>
                   <template v-else>
                     <view class="carepal-profile-value carepal-profile-value--click" @tap="beginEdit('phone')">
@@ -693,9 +689,9 @@
                 <view class="carepal-profile-label">紧急联系人</view>
                 <view class="carepal-profile-control carepal-profile-control--edit" @tap.stop>
                   <template v-if="editField === 'emergencyName'">
-                    <var-input v-model="editValue" placeholder="请输入紧急联系人姓名" />
-                    <var-button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</var-button>
-                    <var-button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</var-button>
+                    <input v-model="editValue" placeholder="请输入紧急联系人姓名" />
+                    <button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</button>
+                    <button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</button>
                   </template>
                   <template v-else>
                     <view class="carepal-profile-value carepal-profile-value--click" @tap="beginEdit('emergencyName')">
@@ -709,9 +705,9 @@
                 <view class="carepal-profile-label">紧急联系人邮箱</view>
                 <view class="carepal-profile-control carepal-profile-control--edit" @tap.stop>
                   <template v-if="editField === 'emergencyEmail'">
-                    <var-input v-model="editValue" maxlength="80" placeholder="请输入紧急联系人邮箱" />
-                    <var-button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</var-button>
-                    <var-button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</var-button>
+                    <input v-model="editValue" maxlength="80" placeholder="请输入紧急联系人邮箱" />
+                    <button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</button>
+                    <button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</button>
                   </template>
                   <template v-else>
                     <view class="carepal-profile-value carepal-profile-value--click" @tap="beginEdit('emergencyEmail')">
@@ -722,7 +718,7 @@
               </view>
 
               <view class="carepal-profile-actions">
-                <var-button type="primary" class="carepal-profile-save" @tap="onSaveProfile">保存修改</var-button>
+                <button type="primary" class="carepal-profile-save" @tap="onSaveProfile">保存修改</button>
               </view>
             </view>
 
@@ -731,13 +727,13 @@
               <view class="carepal-profile-row">
                 <view class="carepal-profile-label">长辈关怀模式</view>
                 <view class="carepal-profile-control">
-                  <var-switch v-model="elderMode" />
+                  <switch :checked="elderMode" @change="onElderModeChange" />
                 </view>
               </view>
               <view class="carepal-profile-row">
                 <view class="carepal-profile-label">暗夜模式</view>
                 <view class="carepal-profile-control">
-                  <var-switch v-model="darkMode" />
+                  <switch :checked="darkMode" @change="onDarkModeChange" />
                 </view>
               </view>
             </view>
@@ -751,34 +747,34 @@
     <view v-if="loginDialogVisible" class="carepal-login-mask" @tap="closeLoginDialog">
       <view class="carepal-login-panel" @tap.stop>
         <view class="carepal-login-tabs">
-          <var-button
+          <button
             size="small"
             :type="authMode === 'login' ? 'primary' : 'default'"
             class="carepal-login-tab-btn"
             @tap="switchAuthMode('login')"
           >
             登录
-          </var-button>
-          <var-button
+          </button>
+          <button
             size="small"
             :type="authMode === 'register' ? 'primary' : 'default'"
             class="carepal-login-tab-btn"
             @tap="switchAuthMode('register')"
           >
             注册
-          </var-button>
+          </button>
         </view>
         <view class="carepal-login-title">{{ authMode === 'login' ? '账号登录' : '创建账号' }}</view>
         <view class="carepal-login-subtitle">{{ authMode === 'login' ? '登录后可调用受保护接口' : '注册成功后将自动登录' }}</view>
-        <var-input v-model="loginForm.username" :maxlength="authRules.usernameMaxLength" placeholder="请输入用户名" class="carepal-login-input" />
-        <var-input v-model="loginForm.password" type="password" :maxlength="authRules.passwordMaxLength" :placeholder="`请输入密码（至少 ${authRules.passwordMinLength} 位）`" class="carepal-login-input" />
+        <input v-model="loginForm.username" :maxlength="authRules.usernameMaxLength" placeholder="请输入用户名" class="carepal-login-input" />
+        <input v-model="loginForm.password" type="password" :maxlength="authRules.passwordMaxLength" :placeholder="`请输入密码（至少 ${authRules.passwordMinLength} 位）`" class="carepal-login-input" />
         <template v-if="authMode === 'register'">
-          <var-input
+          <input
             v-model="loginForm.emergencyName"
             placeholder="请输入紧急联系人"
             class="carepal-login-input"
           />
-          <var-input
+          <input
             v-model="loginForm.emergencyEmail"
             maxlength="80"
             placeholder="请输入紧急联系人邮箱"
@@ -786,18 +782,18 @@
           />
         </template>
         <view class="carepal-login-actions">
-          <var-button
+          <button
             v-if="isUserLoggedIn"
             plain
             class="carepal-login-btn carepal-login-btn--danger"
             @tap="logout"
           >
             退出登录
-          </var-button>
-          <var-button plain class="carepal-login-btn" @tap="closeLoginDialog">取消</var-button>
-          <var-button type="primary" class="carepal-login-btn" :loading="authSubmitting" @tap="submitAuth">
+          </button>
+          <button plain class="carepal-login-btn" @tap="closeLoginDialog">取消</button>
+          <button type="primary" class="carepal-login-btn" :loading="authSubmitting" @tap="submitAuth">
             {{ authMode === 'login' ? '登录' : '注册' }}
-          </var-button>
+          </button>
         </view>
       </view>
     </view>
@@ -4570,6 +4566,14 @@ export default {
       uni.setStorageSync('carepal_profile', this.profile)
       uni.showToast({ title: '已保存', icon: 'success' })
     },
+    onElderModeChange(event) {
+      const value = !!(event && event.detail && event.detail.value)
+      this.elderMode = value
+    },
+    onDarkModeChange(event) {
+      const value = !!(event && event.detail && event.detail.value)
+      this.darkMode = value
+    },
     beginEdit(field) {
       this.editField = field
       this.editValue = this.profile[field] || ''
@@ -5911,6 +5915,90 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 小程序优先：功能栏下移到底部 */
+.carepal-shell {
+  padding-bottom: calc(162rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.carepal-main-left {
+  flex: 0;
+  width: 0;
+  max-width: 0;
+  min-width: 0;
+  overflow: visible;
+}
+
+.carepal-main-right {
+  flex: 1;
+}
+
+.carepal-sidebar-handle {
+  display: none;
+}
+
+.carepal-sidebar {
+  position: fixed;
+  left: 20rpx;
+  right: 20rpx;
+  bottom: calc(18rpx + env(safe-area-inset-bottom));
+  z-index: 40;
+  min-height: 0;
+  padding: 14rpx 12rpx;
+  border-radius: 20rpx;
+  flex-direction: row;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.carepal-sidebar::before,
+.carepal-sidebar-identity,
+.carepal-sidebar-title {
+  display: none;
+}
+
+.carepal-nav-button {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  margin-bottom: 0;
+  height: 112rpx;
+  padding: 10rpx 8rpx;
+  border-radius: 14rpx;
+  justify-content: center;
+}
+
+.carepal-nav-button::before {
+  display: none;
+}
+
+.carepal-nav-content {
+  flex-direction: column;
+  justify-content: center;
+  gap: 6rpx;
+  min-height: 0;
+}
+
+.carepal-nav-icon-wrap {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 14rpx;
+}
+
+.carepal-nav-icon {
+  width: 34rpx;
+  height: 34rpx;
+}
+
+.carepal-nav-label {
+  font-size: 22rpx;
+  text-align: center;
+}
+
+.carepal-nav-desc {
+  display: none;
 }
 
 /* 通用右侧面板 */
@@ -8013,3 +8101,4 @@ export default {
   }
 }
 </style>
+

@@ -82,11 +82,6 @@
               @tap="onModuleChange(item.key)"
             >
               <view class="carepal-nav-content">
-                <view
-                  :class="['carepal-nav-icon-wrap', currentModule === item.key ? 'is-active' : '']"
-                >
-                  <image class="carepal-nav-icon" :src="item.icon" mode="aspectFit" />
-                </view>
                 <view class="carepal-nav-text">
                   <view class="carepal-nav-label">{{ item.label }}</view>
                   <view class="carepal-nav-desc">{{ item.desc }}</view>
@@ -565,74 +560,7 @@
             </view>
           </view>
 
-          <!-- 模块 5：监控 -->
-          <view v-else-if="currentModule === 'monitor'" class="carepal-panel carepal-monitor">
-            <view class="carepal-panel-header">
-              <view class="carepal-panel-title">监控</view>
-              <view class="carepal-panel-subtitle">跌倒风险检测（后续接入 YOLO 跌倒检测接口）</view>
-            </view>
-
-            <view class="carepal-monitor-layout">
-              <view class="carepal-monitor-left">
-                <view class="carepal-monitor-card">
-                  <view class="carepal-monitor-card-title">检测控制</view>
-                  <view class="carepal-monitor-actions">
-                    <button type="primary" class="carepal-monitor-btn" @tap="toggleMonitorCamera">
-                      {{ monitorCameraVisible ? '关闭摄像头' : '打开摄像头' }}
-                    </button>
-                    <button
-                      class="carepal-monitor-btn"
-                      :type="monitorDetecting ? 'danger' : 'default'"
-                      :disabled="!monitorCameraVisible"
-                      @tap="toggleMonitorDetecting"
-                    >
-                      {{ monitorDetecting ? '停止检测' : '开始检测' }}
-                    </button>
-                  </view>
-
-                  <view class="carepal-monitor-status-row">
-                    <view class="carepal-monitor-status-label">当前状态</view>
-                    <view :class="['carepal-monitor-status-pill', monitorDetecting ? 'is-running' : 'is-idle']">
-                      {{ monitorDetecting ? '检测中' : '未检测' }}
-                    </view>
-                  </view>
-                  <view class="carepal-monitor-status-row">
-                    <view class="carepal-monitor-status-label">检测结果</view>
-                    <view :class="['carepal-monitor-status-pill', monitorLastResult.hasFall ? 'is-alert' : 'is-safe']">
-                      {{ monitorLastResult.hasFall ? '疑似跌倒' : '未发现跌倒' }}
-                    </view>
-                  </view>
-                  <view class="carepal-monitor-hint">{{ monitorStatusHint }}</view>
-                </view>
-              </view>
-
-              <view class="carepal-monitor-right">
-                <view class="carepal-monitor-view" style="position: relative;">
-                  <video
-                    v-if="monitorCameraVisible"
-                    ref="monitorCameraVideo"
-                    class="carepal-monitor-video"
-                    autoplay
-                    playsinline
-                    muted
-                  ></video>
-                  <canvas 
-                    v-if="monitorCameraVisible" 
-                    canvas-id="yoloCanvas" 
-                    id="yoloCanvas"
-                    class="carepal-monitor-canvas"
-                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"
-                  ></canvas>
-                  <view v-else class="carepal-monitor-placeholder">
-                    <view class="carepal-monitor-placeholder-title">监控画面</view>
-                    <view class="carepal-monitor-placeholder-text">点击左侧“打开摄像头”开始预览</view>
-                  </view>
-                </view>
-              </view>
-            </view>
-          </view>
-
-          <!-- 模块 6：我的 / 设置 -->
+          <!-- 模块 5：我的 / 设置 -->
           <view v-else class="carepal-panel carepal-profile">
             <view class="carepal-panel-header">
               <view class="carepal-panel-title">我们</view>
@@ -1104,7 +1032,6 @@ export default {
         { key: 'schedule', label: '日程表', desc: '查看今日用药与训练安排', icon: '/static/icons/schedule.svg' },
         { key: 'weekly-report', label: '周报告', desc: '完成周度问卷，生成康复总结', icon: '/static/icons/schedule.svg' },
         { key: 'ocr', label: 'OCR 识别', desc: '拍照识别药盒与说明书', icon: '/static/icons/ocr.svg' },
-        { key: 'monitor', label: '监控', desc: '摄像头预览与跌倒检测', icon: '/static/icons/ocr.svg' },
         { key: 'profile', label: '我的', desc: '账号与提醒偏好设置', icon: '/static/icons/profile.svg' },
       ],
       currentModule: 'chat',
@@ -3081,9 +3008,7 @@ export default {
       if (key !== 'schedule') {
         this.closeCalendarDrawer()
       }
-      if (key !== 'monitor') {
-        this.closeMonitorCamera()
-      }
+      this.closeMonitorCamera()
     },
     toggleSidebar() {
       this.sidebarExpanded = !this.sidebarExpanded

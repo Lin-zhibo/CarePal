@@ -4,10 +4,10 @@
       <view class="carepal-header-left">
         <view class="carepal-header-brand">
           <view class="carepal-header-logo">
-            <image class="carepal-header-logo-image" src="/static/logo.png" mode="aspectFit" />
+            <image class="carepal-header-logo-image" src="/static/img/logo.png" mode="aspectFit" />
           </view>
           <view class="carepal-header-title-wrap">
-            <view class="carepal-header-title">CarePal 康伴 · 健康控制台</view>
+            <view class="carepal-header-title">CarePal康伴</view>
             <view class="carepal-header-subtitle">智能康复陪伴平台</view>
           </view>
         </view>
@@ -254,7 +254,12 @@
                 <view class="carepal-table-col time" @tap="openScheduleFieldEditor(item, 'time')">{{ item.time }}</view>
                 <view class="carepal-table-col medication" @tap="openScheduleFieldEditor(item, 'medicine')">
                   <view class="carepal-medication-name">{{ item.medicine }}</view>
-                  <view :class="['carepal-status-pill', 'is-' + item.medicationTagType]">{{ item.medicationTag }}</view>
+                  <view
+                    :class="['carepal-status-pill', 'is-clickable', 'is-' + item.medicationTagType]"
+                    @tap.stop="toggleScheduleTaken(item)"
+                  >
+                    {{ item.medicationTag }}
+                  </view>
                 </view>
                 <view class="carepal-table-col bp" @tap="openScheduleFieldEditor(item, 'bp')">{{ item.bp }}</view>
                 <view class="carepal-table-col weight" @tap="openScheduleFieldEditor(item, 'weight')">{{ item.weight || '—' }}</view>
@@ -294,11 +299,11 @@
                   @tap="selectCalendarMonth(month.monthIndex)"
                 >
                   <view class="carepal-calendar-year-item-title">{{ month.label }}</view>
-                  <view class="carepal-calendar-year-item-meta">{{ month.takenDays }}/{{ month.totalDays }} 天正常</view>
+                  <view class="carepal-calendar-year-item-meta">{{ month.isFutureMonth ? `-/${month.totalDays} 天正常` : `${month.takenDays}/${month.totalDays} 天正常` }}</view>
                   <view class="carepal-calendar-year-progress">
-                    <view class="carepal-calendar-year-progress-fill" :style="{ width: `${Math.round(month.completion * 100)}%` }"></view>
+                    <view class="carepal-calendar-year-progress-fill" :style="{ width: month.isFutureMonth ? '0%' : `${Math.round(month.completion * 100)}%` }"></view>
                   </view>
-                  <view class="carepal-calendar-year-item-rate">完成率 {{ Math.round(month.completion * 100) }}%</view>
+                  <view class="carepal-calendar-year-item-rate">{{ month.isFutureMonth ? '未记录' : `完成率 ${Math.round(month.completion * 100)}%` }}</view>
                 </view>
               </view>
               <view class="carepal-calendar-inline-tip">点击月份卡，在右侧查看该月日历</view>
@@ -331,8 +336,9 @@
                     :class="[
                       'carepal-calendar-cell',
                       cell.day ? '' : 'is-empty',
-                      cell.day && (isCalendarCellAfterToday(cell.day) || cell.taken) ? 'is-ok' : '',
-                      cell.day && !isCalendarCellAfterToday(cell.day) && !cell.taken ? 'is-miss' : '',
+                      cell.day && cell.isUnrecorded ? 'is-unrecorded' : '',
+                      cell.day && !cell.isUnrecorded && cell.taken ? 'is-ok' : '',
+                      cell.day && !cell.isUnrecorded && !cell.taken ? 'is-miss' : '',
                       cell.day && selectedCalendarDay === cell.day ? 'is-selected' : '',
                       cell.day && isCalendarCellBeforeToday(cell.day) ? 'is-before-today' : '',
                       cell.day && isCalendarCellAfterToday(cell.day) ? 'is-after-today' : '',
@@ -341,6 +347,7 @@
                   >
                     <template v-if="cell.day">
                       <view class="carepal-calendar-day">{{ cell.day }}</view>
+                      <view v-if="cell.isUnrecorded" class="carepal-calendar-day-note">未记录</view>
                     </template>
                   </view>
                 </view>
@@ -555,9 +562,10 @@
               <view class="carepal-weekly-file-name" v-if="weeklyAiSubmitHint">{{ weeklyAiSubmitHint }}</view>
             </view>
 
-            <view class="carepal-weekly-result" v-if="weeklyReportText">
-              <view class="carepal-weekly-section-title">AI 周报告建议</view>
-              <view class="carepal-weekly-result-text">{{ weeklyReportText }}</view>
+            <view class="carepal-weekly-result" v-if="weeklyReportText || weeklyReportEncouragement">
+              <view class="carepal-weekly-section-title">AI 周报建议</view>
+              <view class="carepal-weekly-result-text" v-if="weeklyReportText">{{ weeklyReportText }}</view>
+              <view class="carepal-weekly-result-encouragement" v-if="weeklyReportEncouragement">{{ weeklyReportEncouragement }}</view>
             </view>
           </view>
 
@@ -603,7 +611,7 @@
               </view>
 
               <view class="carepal-monitor-right">
-                <view class="carepal-monitor-view">
+                <view class="carepal-monitor-view" style="position: relative;">
                   <video
                     v-if="monitorCameraVisible"
                     ref="monitorCameraVideo"
@@ -612,6 +620,13 @@
                     playsinline
                     muted
                   ></video>
+                  <canvas 
+                    v-if="monitorCameraVisible" 
+                    canvas-id="yoloCanvas" 
+                    id="yoloCanvas"
+                    class="carepal-monitor-canvas"
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"
+                  ></canvas>
                   <view v-else class="carepal-monitor-placeholder">
                     <view class="carepal-monitor-placeholder-title">监控画面</view>
                     <view class="carepal-monitor-placeholder-text">点击左侧“打开摄像头”开始预览</view>
@@ -691,16 +706,16 @@
               </view>
 
               <view class="carepal-profile-row carepal-profile-row--form">
-                <view class="carepal-profile-label">紧急联系电话</view>
+                <view class="carepal-profile-label">紧急联系人邮箱</view>
                 <view class="carepal-profile-control carepal-profile-control--edit" @tap.stop>
-                  <template v-if="editField === 'emergencyPhone'">
-                    <var-input v-model="editValue" type="number" maxlength="11" placeholder="请输入紧急联系人电话" />
+                  <template v-if="editField === 'emergencyEmail'">
+                    <var-input v-model="editValue" maxlength="80" placeholder="请输入紧急联系人邮箱" />
                     <var-button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</var-button>
                     <var-button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</var-button>
                   </template>
                   <template v-else>
-                    <view class="carepal-profile-value carepal-profile-value--click" @tap="beginEdit('emergencyPhone')">
-                      {{ profile.emergencyPhone || '未设置' }}
+                    <view class="carepal-profile-value carepal-profile-value--click" @tap="beginEdit('emergencyEmail')">
+                      {{ profile.emergencyEmail || '未设置' }}
                     </view>
                   </template>
                 </view>
@@ -764,10 +779,9 @@
             class="carepal-login-input"
           />
           <var-input
-            v-model="loginForm.emergencyPhone"
-            type="number"
-            maxlength="20"
-            placeholder="请输入紧急联系电话"
+            v-model="loginForm.emergencyEmail"
+            maxlength="80"
+            placeholder="请输入紧急联系人邮箱"
             class="carepal-login-input"
           />
         </template>
@@ -1143,7 +1157,7 @@ export default {
         username: '',
         password: '',
         emergencyName: '',
-        emergencyPhone: '',
+        emergencyEmail: '',
       },
       scheduleItems: [
         {
@@ -1210,11 +1224,21 @@ export default {
         31: true,
       },
       medicationRecordsMap: {},
+      medicationMonthCache: {},
+      medicationMonthCacheStorageKey: 'carepal_medication_month_cache',
       medicationCalendarCells: [],
       selectedCalendarDay: 0,
       selectedCalendarDetail: null,
       currentCalendarYear: 2026,
       currentCalendarMonth: 2,
+      medicationReminderTimer: null,
+      medicationReminderDateKey: '',
+      medicationReminderLastMinuteKey: '',
+      medicationReminderShownMap: {},
+      medicationReminderStoragePrefix: 'carepal_medication_remind_',
+      medicationReminderSoundEnabled: true,
+      medicationReminderSoundSrc: '/sound/ding.mp3',
+      medicationReminderAudioContext: null,
       calendarDrawerVisible: false,
       activeScheduleTime: '',
       activeSchedulePulse: false,
@@ -1252,12 +1276,15 @@ export default {
       },
       weeklyAiSubmitHint: '',
       weeklyReportText: '',
+      weeklyReportEncouragement: '',
+      weeklyReportAudit: null,
+      weeklyReportLogs: [],
       profile: {
         avatar: '',
         name: '康复小伙伴',
         phone: '13800000000',
         emergencyName: '',
-        emergencyPhone: '',
+        emergencyEmail: '',
       },
       editField: '',
       editValue: '',
@@ -1267,6 +1294,7 @@ export default {
   },
   onLoad() {
     this.loadLocalSettings()
+    this.loadMedicationMonthCacheFromStorage()
     this.currentWeekRange = this.getCurrentWeekRange()
     const savedToken = uni.getStorageSync(this.storageKeys.accessToken)
     this.authToken = typeof savedToken === 'string' ? savedToken : ''
@@ -1279,10 +1307,12 @@ export default {
     this.currentCalendarYear = today.getFullYear()
     this.currentCalendarMonth = today.getMonth()
     this.buildMedicationCalendar()
+    this.startMedicationReminderLoop()
     this.initRecorderManager()
     this.restoreChatHistory()
   },
   onUnload() {
+    this.stopMedicationReminderLoop()
     this.flushPersistChatHistory()
     if (this.chatPersistTimer) {
       clearTimeout(this.chatPersistTimer)
@@ -1356,32 +1386,100 @@ export default {
     },
     displayedScheduleItems() {
       const records = (this.selectedCalendarDetail && this.selectedCalendarDetail.records) || []
+      const dayCompare = this.compareCalendarDayWithToday(this.selectedCalendarDay)
+      const isFutureSelectedDay = dayCompare > 0
+      const isTodaySelectedDay = dayCompare === 0
+      const now = new Date()
+      const nowMinutes = now.getHours() * 60 + now.getMinutes()
       const recordMap = records.reduce((acc, record) => {
         acc[record.time] = record
         return acc
       }, {})
 
       return this.scheduleItems.map((baseItem) => {
-        const record = recordMap[baseItem.time]
-        const taken = record ? record.taken : false
+        const record = recordMap[baseItem.time] || null
+        const mergedItem = record ? { ...baseItem, ...record } : { ...baseItem }
+        const hasTakenRecord = !!record && typeof record.taken === 'boolean'
+        const slotMinutes = this.parseTimeToMinutes(mergedItem.time || baseItem.time)
+        const isTodayElapsedSlot = isTodaySelectedDay && slotMinutes >= 0 && slotMinutes <= nowMinutes
+
+        let medicationTag = '未记录'
+        let medicationTagType = 'pending'
+        if (isFutureSelectedDay) {
+          medicationTag = '未记录'
+          medicationTagType = 'pending'
+        } else if (hasTakenRecord) {
+          medicationTag = record.taken ? '已服药' : '未服药'
+          medicationTagType = record.taken ? 'done' : 'miss'
+        } else if (isTodayElapsedSlot) {
+          medicationTag = '未服药'
+          medicationTagType = 'miss'
+        }
+
+        let matterTag = '未记录'
+        let matterTagType = medicationTagType
+        if (medicationTagType === 'done') {
+          matterTag = '正常'
+        } else if (medicationTagType === 'miss') {
+          matterTag = '待补服'
+        }
+
+        const medicineText =
+          typeof mergedItem.medicine === 'string' && mergedItem.medicine.trim()
+            ? mergedItem.medicine.trim()
+            : '待补充'
+        const moodText =
+          typeof mergedItem.mood === 'string' && mergedItem.mood.trim()
+            ? mergedItem.mood.trim()
+            : '—'
+
         return {
-          ...baseItem,
-          medicine: record ? record.medicine : '暂无记录',
-          mood: record ? (record.mood || baseItem.mood) : (baseItem.mood || '—'),
-          medicationTag: record ? (taken ? '已服药' : '未服药') : '未登记',
-          medicationTagType: record ? (taken ? 'done' : 'miss') : 'pending',
-          matterTag: record ? (taken ? '正常' : '待补服') : '待补充',
-          matterTagType: record ? (taken ? 'done' : 'miss') : 'pending',
+          ...mergedItem,
+          medicine: medicineText,
+          mood: moodText,
+          medicationTag,
+          medicationTagType,
+          matterTag,
+          matterTagType,
         }
       })
     },
     calendarYearOverview() {
       const year = this.currentCalendarYear
+      const today = new Date()
       return Array.from({ length: 12 }, (_, monthIndex) => {
-        const monthData = this.getMedicationMonthData(year, monthIndex)
-        const statusValues = Object.values(monthData.statusMap || {})
-        const totalDays = statusValues.length
-        const takenDays = statusValues.filter(Boolean).length
+        const monthData = this.getMedicationMonthDataSnapshot(year, monthIndex)
+        const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
+        const isFutureMonth =
+          year > today.getFullYear() ||
+          (year === today.getFullYear() && monthIndex > today.getMonth())
+        const isCurrentRealMonth =
+          year === today.getFullYear() &&
+          monthIndex === today.getMonth()
+
+        if (isFutureMonth) {
+          return {
+            monthIndex,
+            label: `${monthIndex + 1}月`,
+            totalDays: daysInMonth,
+            takenDays: 0,
+            completion: 0,
+            isFutureMonth,
+          }
+        }
+
+        let totalDays = 0
+        let takenDays = 0
+        for (let day = 1; day <= daysInMonth; day += 1) {
+          if (isCurrentRealMonth && day > today.getDate()) {
+            continue
+          }
+          totalDays += 1
+          if (monthData.statusMap && monthData.statusMap[day]) {
+            takenDays += 1
+          }
+        }
+
         const completion = totalDays ? takenDays / totalDays : 0
         return {
           monthIndex,
@@ -1389,6 +1487,7 @@ export default {
           totalDays,
           takenDays,
           completion,
+          isFutureMonth,
         }
       })
     },
@@ -1474,7 +1573,7 @@ export default {
       this.loginForm.username = ''
       this.loginForm.password = ''
       this.loginForm.emergencyName = ''
-      this.loginForm.emergencyPhone = ''
+      this.loginForm.emergencyEmail = ''
       this.authMode = 'login'
       this.loginDialogVisible = true
     },
@@ -1505,7 +1604,7 @@ export default {
       this.loginForm.username = ''
       this.loginForm.password = ''
       this.loginForm.emergencyName = ''
-      this.loginForm.emergencyPhone = ''
+      this.loginForm.emergencyEmail = ''
       uni.removeStorageSync(this.storageKeys.accessToken)
       uni.removeStorageSync(this.storageKeys.authUsername)
       this.restoreChatHistory()
@@ -1529,17 +1628,17 @@ export default {
       }
 
       const emergencyName = (this.loginForm.emergencyName || '').trim()
-      const emergencyPhone = (this.loginForm.emergencyPhone || '').trim()
+      const emergencyEmail = (this.loginForm.emergencyEmail || '').trim()
       if (this.authMode === 'register') {
-        if (!emergencyName || !emergencyPhone) {
-          throw new Error('请填写紧急联系人与联系电话')
+        if (!emergencyName || !emergencyEmail) {
+          throw new Error('请填写紧急联系人与邮箱')
         }
-        const validPhone = /^[0-9+\-]{6,20}$/.test(emergencyPhone)
-        if (!validPhone) {
-          throw new Error('紧急联系电话格式不正确')
+        const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emergencyEmail)
+        if (!validEmail) {
+          throw new Error('紧急联系人邮箱格式不正确')
         }
       }
-      return { username, password, emergencyName, emergencyPhone }
+      return { username, password, emergencyName, emergencyEmail }
     },
     applyAuthSuccess(username, token) {
       this.authToken = token
@@ -1589,11 +1688,16 @@ export default {
     },
     async submitRegister() {
       try {
-        const { username, password, emergencyName, emergencyPhone } = this.validateAuthForm()
+        const { username, password, emergencyName, emergencyEmail } = this.validateAuthForm()
         const registerData = await this.requestJson({
           path: this.apiPaths.register,
           method: 'POST',
-          data: { username, password },
+          data: {
+            username,
+            password,
+            emergency_contact_name: emergencyName,
+            emergency_contact_email: emergencyEmail,
+          },
         })
         let token = (registerData && registerData.access_token) || ''
 
@@ -1612,7 +1716,7 @@ export default {
 
         this.profile.name = username
         this.profile.emergencyName = emergencyName
-        this.profile.emergencyPhone = emergencyPhone
+        this.profile.emergencyEmail = emergencyEmail
 
         this.applyAuthSuccess(username, token)
         uni.showToast({ title: '注册并登录成功', icon: 'success' })
@@ -2097,13 +2201,335 @@ export default {
         '请基于以上数据生成周报告建议。',
       ].join('\n')
     },
+    /**
+     * Build user-facing payload source label for weekly audit panel.
+     * @param {'assistant_payload'|'assistant_text_json'|'none'|string} payloadSource - Source key of the parsed weekly payload.
+     * @returns {string} Human-readable label shown in UI.
+     * Convert internal payload source key into a Chinese label for display.
+     */
+    buildWeeklyPayloadSourceLabel(payloadSource) {
+      if (payloadSource === 'assistant_payload') return 'assistant_payload（对象）'
+      if (payloadSource === 'assistant_text_json') return 'assistant_text（提取 JSON）'
+      return '未识别结构化数据'
+    },
+    /**
+     * Clone weekly log data into JSON-safe plain object.
+     * @param {any} value - Any runtime object/value captured in weekly log.
+     * @returns {any} Deep-cloned JSON-safe value, or null when cloning fails.
+     * Avoid logging reactive references and ensure log snapshot stays stable.
+     */
+    cloneWeeklyLogData(value) {
+      try {
+        return JSON.parse(JSON.stringify(value))
+      } catch (error) {
+        return null
+      }
+    },
+    /**
+     * Push a weekly report log entry and keep only recent entries.
+     * @param {Object} logEntry - Structured log object for one weekly report generation attempt.
+     * @returns {void} No return value.
+     * Store log snapshot in memory and print to console for debugging.
+     */
+    pushWeeklyReportLog(logEntry) {
+      const entry = this.cloneWeeklyLogData(logEntry) || {}
+      this.weeklyReportLogs = [entry, ...this.weeklyReportLogs].slice(0, 30)
+      if (typeof console !== 'undefined' && typeof console.log === 'function') {
+        console.log('[WeeklyReport]', entry)
+      }
+    },
+    /**
+     * Audit and normalize weekly report payload based on agent JSON contract.
+     * @param {Object|null} payload - Raw JSON object from assistant_payload or parsed assistant_text.
+     * @returns {{normalized: ({week_range: string, overall_level: string, total_score: string, avg_score: string, top_issues: Array<{question_id: string, question: string, score: string}>, this_week_focus: string[], daily_actions: string[], risk_warnings: string[], medical_followup: string, encouragement: string, _audit: Object, _isNormalized: boolean}|null), audit: Object}} Normalized payload and audit result.
+     * Validate nested JSON structure, record missing/type issues, and produce normalized fields for template rendering.
+     */
+    auditAndNormalizeWeeklyReportPayload(payload) {
+      const expectedFieldPaths = [
+        'week_range',
+        'overall_level',
+        'score_summary.total_score',
+        'score_summary.avg_score',
+        'score_summary.top_issues',
+        'advice.this_week_focus',
+        'advice.daily_actions',
+        'advice.risk_warnings',
+        'advice.medical_followup',
+        'encouragement',
+      ]
+      const audit = {
+        payloadSource: 'none',
+        payloadSourceLabel: this.buildWeeklyPayloadSourceLabel('none'),
+        expectedFieldCount: expectedFieldPaths.length,
+        receivedFieldCount: 0,
+        missingFields: [],
+        emptyFields: [],
+        typeErrors: [],
+        nonStandardHits: [],
+        matchedFieldPaths: [],
+        status: 'invalid',
+      }
+
+      if (!payload || typeof payload !== 'object') {
+        audit.missingFields = [...expectedFieldPaths]
+        return { normalized: null, audit }
+      }
+
+      const hasValue = (value) => value !== undefined && value !== null
+      const uniqueList = (list) => [...new Set((Array.isArray(list) ? list : []).filter((item) => typeof item === 'string' && item.trim()))]
+      const matchedFieldSet = new Set()
+
+      const scoreSummary = hasValue(payload.score_summary) && typeof payload.score_summary === 'object' ? payload.score_summary : null
+      const advice = hasValue(payload.advice) && typeof payload.advice === 'object' ? payload.advice : null
+
+      if (hasValue(payload.score_summary) && !scoreSummary) {
+        audit.typeErrors.push('score_summary 应为对象')
+      }
+      if (hasValue(payload.advice) && !advice) {
+        audit.typeErrors.push('advice 应为对象')
+      }
+
+      const pickField = (primaryValue, fallbackValue, expectedPath, fallbackPath) => {
+        if (hasValue(primaryValue)) {
+          matchedFieldSet.add(expectedPath)
+          return primaryValue
+        }
+        if (hasValue(fallbackValue)) {
+          matchedFieldSet.add(expectedPath)
+          audit.nonStandardHits.push(`${fallbackPath} -> ${expectedPath}`)
+          return fallbackValue
+        }
+        return undefined
+      }
+
+      const toText = (value, expectedPath, fallback = '无') => {
+        if (typeof value === 'string') {
+          const text = value.trim()
+          if (!text) {
+            audit.emptyFields.push(expectedPath)
+            return fallback
+          }
+          return text
+        }
+        if (typeof value === 'number' || typeof value === 'boolean') {
+          return String(value)
+        }
+        if (hasValue(value)) {
+          audit.typeErrors.push(`${expectedPath} 应为字符串/数字/布尔值`)
+        }
+        return fallback
+      }
+
+      const toStringList = (value, expectedPath) => {
+        if (Array.isArray(value)) {
+          const list = value
+            .map((item) => {
+              if (typeof item === 'string') return item.trim()
+              if (typeof item === 'number' || typeof item === 'boolean') return String(item)
+              return ''
+            })
+            .filter((item) => !!item)
+          if (!list.length) {
+            audit.emptyFields.push(expectedPath)
+          }
+          return list
+        }
+        if (typeof value === 'string') {
+          const text = value.trim()
+          if (!text) {
+            audit.emptyFields.push(expectedPath)
+            return []
+          }
+          return [text]
+        }
+        if (typeof value === 'number' || typeof value === 'boolean') {
+          return [String(value)]
+        }
+        if (hasValue(value)) {
+          audit.typeErrors.push(`${expectedPath} 应为数组或字符串`)
+        }
+        return []
+      }
+
+      const toTopIssues = (value, expectedPath) => {
+        if (!Array.isArray(value)) {
+          if (hasValue(value)) {
+            audit.typeErrors.push(`${expectedPath} 应为数组`)
+          }
+          return []
+        }
+        if (!value.length) {
+          audit.emptyFields.push(expectedPath)
+          return []
+        }
+
+        const normalizedIssues = value
+          .map((item, index) => {
+            const itemPath = `${expectedPath}[${index}]`
+            if (!item || typeof item !== 'object') {
+              audit.typeErrors.push(`${itemPath} 应为对象`)
+              return null
+            }
+            if (!hasValue(item.question_id)) {
+              audit.typeErrors.push(`${itemPath}.question_id 缺失`)
+            }
+            if (!hasValue(item.question)) {
+              audit.typeErrors.push(`${itemPath}.question 缺失`)
+            }
+            if (!hasValue(item.score)) {
+              audit.typeErrors.push(`${itemPath}.score 缺失`)
+            }
+
+            return {
+              question_id: toText(item.question_id, `${itemPath}.question_id`),
+              question: toText(item.question, `${itemPath}.question`),
+              score: toText(item.score, `${itemPath}.score`),
+            }
+          })
+          .filter((item) => !!item)
+
+        if (!normalizedIssues.length) {
+          audit.emptyFields.push(expectedPath)
+        }
+        return normalizedIssues
+      }
+
+      const weekRangeRaw = pickField(payload.week_range, undefined, 'week_range', 'week_range')
+      const overallLevelRaw = pickField(payload.overall_level, undefined, 'overall_level', 'overall_level')
+      const totalScoreRaw = pickField(scoreSummary && scoreSummary.total_score, payload.total_score, 'score_summary.total_score', 'total_score')
+      const avgScoreRaw = pickField(scoreSummary && scoreSummary.avg_score, payload.avg_score, 'score_summary.avg_score', 'avg_score')
+      const topIssuesRaw = pickField(scoreSummary && scoreSummary.top_issues, payload.top_issues, 'score_summary.top_issues', 'top_issues')
+      const thisWeekFocusRaw = pickField(advice && advice.this_week_focus, payload.this_week_focus, 'advice.this_week_focus', 'this_week_focus')
+      const dailyActionsRaw = pickField(advice && advice.daily_actions, payload.daily_actions, 'advice.daily_actions', 'daily_actions')
+      const riskWarningsRaw = pickField(advice && advice.risk_warnings, payload.risk_warnings, 'advice.risk_warnings', 'risk_warnings')
+      const medicalFollowupRaw = pickField(advice && advice.medical_followup, payload.medical_followup, 'advice.medical_followup', 'medical_followup')
+      const encouragementRaw = pickField(payload.encouragement, advice && advice.encouragement, 'encouragement', 'advice.encouragement')
+
+      const normalized = {
+        week_range: toText(weekRangeRaw, 'week_range'),
+        overall_level: toText(overallLevelRaw, 'overall_level'),
+        total_score: toText(totalScoreRaw, 'score_summary.total_score'),
+        avg_score: toText(avgScoreRaw, 'score_summary.avg_score'),
+        top_issues: toTopIssues(topIssuesRaw, 'score_summary.top_issues'),
+        this_week_focus: toStringList(thisWeekFocusRaw, 'advice.this_week_focus'),
+        daily_actions: toStringList(dailyActionsRaw, 'advice.daily_actions'),
+        risk_warnings: toStringList(riskWarningsRaw, 'advice.risk_warnings'),
+        medical_followup: toText(medicalFollowupRaw, 'advice.medical_followup'),
+        encouragement: toText(encouragementRaw, 'encouragement'),
+        _isNormalized: true,
+      }
+
+      audit.matchedFieldPaths = Array.from(matchedFieldSet)
+      audit.missingFields = expectedFieldPaths.filter((path) => !matchedFieldSet.has(path))
+      audit.emptyFields = uniqueList(audit.emptyFields)
+      audit.typeErrors = uniqueList(audit.typeErrors)
+      audit.nonStandardHits = uniqueList(audit.nonStandardHits)
+      audit.receivedFieldCount = audit.expectedFieldCount - audit.missingFields.length
+
+      if (!audit.missingFields.length && !audit.typeErrors.length && !audit.emptyFields.length) {
+        audit.status = 'ok'
+      } else if (audit.receivedFieldCount > 0) {
+        audit.status = 'partial'
+      } else {
+        audit.status = 'invalid'
+      }
+
+      if (!audit.receivedFieldCount) {
+        return { normalized: null, audit }
+      }
+
+      return {
+        normalized: {
+          ...normalized,
+          _audit: audit,
+        },
+        audit,
+      }
+    },
+    /**
+     * Build the final weekly report template text from normalized JSON fields.
+     * @param {{week_range: string, overall_level: string, total_score: string, avg_score: string, top_issues: Array<{question_id: string, question: string, score: string}>, this_week_focus: string[], daily_actions: string[], risk_warnings: string[], medical_followup: string, encouragement: string, _isNormalized: boolean}|null} report - Normalized weekly report object.
+     * @returns {{mainText: string, encouragementText: string}|null} Template text result for rendering, null when payload cannot be used.
+     * Generate the user-facing weekly report body in fixed order and keep encouragement as a standalone block.
+     */
+    buildWeeklyReportTemplate(report) {
+      if (!report || !report._isNormalized) return null
+
+      const topIssueLines = report.top_issues.length
+        ? report.top_issues.map((item) => `- 题目ID：${item.question_id}，问题：${item.question}，分数：${item.score}`).join('\n')
+        : '- 无'
+      const focusLines = report.this_week_focus.length
+        ? report.this_week_focus.map((item) => `- ${item}`).join('\n')
+        : '- 无'
+      const actionLines = report.daily_actions.length
+        ? report.daily_actions.map((item) => `- ${item}`).join('\n')
+        : '- 无'
+      const riskLines = report.risk_warnings.length
+        ? report.risk_warnings.map((item) => `- ${item}`).join('\n')
+        : '- 无'
+
+      const mainText = [
+        `周报周期：${report.week_range}`,
+        '',
+        `整体风险水平：${report.overall_level}`,
+        '',
+        '分数总结',
+        `总分：${report.total_score}`,
+        `平均分：${report.avg_score}`,
+        '',
+        '主要问题：',
+        topIssueLines,
+        '',
+        '建议',
+        '',
+        '本周重点：',
+        focusLines,
+        '',
+        '每日行动建议：',
+        actionLines,
+        '',
+        '风险提醒：',
+        riskLines,
+        '',
+        '医疗随访建议：',
+        report.medical_followup,
+      ].join('\n')
+
+      return {
+        mainText,
+        encouragementText: report.encouragement,
+      }
+    },
+    /**
+     * Submit weekly questionnaire, record response logs, and render safe weekly report output.
+     * @param {void} noParam - This method does not accept parameters.
+     * @returns {Promise<void>} Promise resolved after submission, parsing, auditing, and rendering.
+     * Ensure structured payload is audited and prevent raw formatted response from being shown to end users.
+     */
     async submitWeeklyQuestionnaireToAi() {
       const unanswered = this.weeklyQuestionnaire.find((question) => this.weeklyManualForm.scores[question.id] === null)
       if (unanswered) {
         uni.showToast({ title: `请完成第${unanswered.code}题评分`, icon: 'none' })
         return
       }
+
+      this.weeklyReportAudit = null
       this.weeklyAiSubmitHint = `已提交 ${this.currentWeekRange} 问卷，正在生成报告...`
+      const weeklyLog = {
+        timestamp: new Date().toISOString(),
+        weekRange: this.currentWeekRange,
+        promptId: this.promptIds.weeklyAssistant,
+        payloadSource: 'none',
+        rawResponse: null,
+        assistantText: '',
+        assistantPayload: null,
+        extractedPayload: null,
+        audit: null,
+        status: 'pending',
+        renderMode: '',
+        errorMessage: '',
+      }
+
       try {
         await this.ensureAuthToken()
         const response = await this.requestJson({
@@ -2117,12 +2543,93 @@ export default {
           },
           withAuth: true,
         })
-        this.weeklyReportText = (response && (response.assistant_text || response.answer)) || '后端未返回周报告文本'
-        this.weeklyAiSubmitHint = `已生成 ${this.currentWeekRange} 周报告`
-        uni.showToast({ title: '周报告已生成', icon: 'success' })
+        weeklyLog.rawResponse = this.cloneWeeklyLogData(response)
+
+        const rawWeeklyReply = (response && (response.assistant_text || response.answer)) || ''
+        weeklyLog.assistantText = rawWeeklyReply
+
+        const assistantPayload = response && response.assistant_payload && typeof response.assistant_payload === 'object'
+          ? response.assistant_payload
+          : null
+        weeklyLog.assistantPayload = this.cloneWeeklyLogData(assistantPayload)
+
+        let weeklyPayload = null
+        if (assistantPayload) {
+          weeklyPayload = assistantPayload
+          weeklyLog.payloadSource = 'assistant_payload'
+        } else {
+          const parsedFromText = this.extractJsonPayload(rawWeeklyReply)
+          if (parsedFromText && typeof parsedFromText === 'object') {
+            weeklyPayload = parsedFromText
+            weeklyLog.payloadSource = 'assistant_text_json'
+          }
+        }
+
+        weeklyLog.extractedPayload = this.cloneWeeklyLogData(weeklyPayload)
+
+        const normalizedResult = this.auditAndNormalizeWeeklyReportPayload(weeklyPayload)
+        const audit = normalizedResult.audit || {
+          payloadSource: 'none',
+          payloadSourceLabel: this.buildWeeklyPayloadSourceLabel('none'),
+          expectedFieldCount: 10,
+          receivedFieldCount: 0,
+          missingFields: [],
+          emptyFields: [],
+          typeErrors: [],
+          nonStandardHits: [],
+          matchedFieldPaths: [],
+          status: 'invalid',
+        }
+
+        audit.payloadSource = weeklyLog.payloadSource
+        audit.payloadSourceLabel = this.buildWeeklyPayloadSourceLabel(weeklyLog.payloadSource)
+        this.weeklyReportAudit = audit
+        weeklyLog.audit = this.cloneWeeklyLogData(audit)
+
+        const weeklyTemplate = this.buildWeeklyReportTemplate(normalizedResult.normalized)
+
+        if (weeklyTemplate) {
+          this.weeklyReportText = weeklyTemplate.mainText
+          this.weeklyReportEncouragement = weeklyTemplate.encouragementText
+          this.weeklyAiSubmitHint = `已生成 ${this.currentWeekRange} 周报告`
+          weeklyLog.status = 'success'
+          weeklyLog.renderMode = 'template'
+          this.pushWeeklyReportLog(weeklyLog)
+          uni.showToast({ title: '周报告已生成', icon: 'success' })
+        } else {
+          this.weeklyReportText = '周报告已生成，但返回数据结构未命中模板，已记录报文供排查。'
+          this.weeklyReportEncouragement = ''
+          this.weeklyAiSubmitHint = `已收到 ${this.currentWeekRange} 报文，字段需检查`
+          weeklyLog.status = 'partial'
+          weeklyLog.renderMode = 'safe-fallback'
+          this.pushWeeklyReportLog(weeklyLog)
+          uni.showToast({ title: '周报告字段需检查', icon: 'none' })
+        }
       } catch (error) {
         this.weeklyAiSubmitHint = ''
-        this.weeklyReportText = ''
+        this.weeklyReportText = '周报告生成失败，请稍后重试。'
+        this.weeklyReportEncouragement = ''
+
+        if (!this.weeklyReportAudit) {
+          this.weeklyReportAudit = {
+            payloadSource: 'none',
+            payloadSourceLabel: this.buildWeeklyPayloadSourceLabel('none'),
+            expectedFieldCount: 10,
+            receivedFieldCount: 0,
+            missingFields: [],
+            emptyFields: [],
+            typeErrors: [((error && error.message) || '生成周报告失败')],
+            nonStandardHits: [],
+            matchedFieldPaths: [],
+            status: 'error',
+          }
+        }
+
+        weeklyLog.status = 'error'
+        weeklyLog.renderMode = 'error'
+        weeklyLog.errorMessage = (error && error.message) || '生成周报告失败'
+        weeklyLog.audit = this.cloneWeeklyLogData(this.weeklyReportAudit)
+        this.pushWeeklyReportLog(weeklyLog)
         uni.showToast({ title: (error && error.message) || '生成周报告失败', icon: 'none' })
       }
     },
@@ -2272,11 +2779,14 @@ export default {
 
       records.sort((a, b) => String(a.time).localeCompare(String(b.time)))
       this.medicationRecordsMap[day] = records
-      this.medicationStatusMap[day] = records.length ? records.every((item) => !!item.taken) : false
+      this.updateDayMedicationStatus(day, records)
 
       if (this.selectedCalendarDay === day) {
         this.selectedCalendarDetail = this.buildSelectedDayDetail(day)
       }
+      this.persistCurrentMonthDataToCache()
+      this.rebuildMedicationCalendarCells()
+      this.updateMedicationStatusHint()
       return true
     },
     async normalizeAssistantReply(response) {
@@ -2971,7 +3481,7 @@ export default {
       }
       return video || null
     },
-    toggleMonitorDetecting() {
+    async toggleMonitorDetecting() {
       if (!this.monitorCameraVisible) {
         uni.showToast({ title: '请先打开摄像头', icon: 'none' })
         return
@@ -2982,6 +3492,14 @@ export default {
         this.monitorStatusHint = '检测已停止，可重新开始。'
         return
       }
+
+      try {
+        await this.ensureAuthToken()
+      } catch (error) {
+        this.monitorStatusHint = (error && error.message) || '请先登录后再使用监控检测'
+        return
+      }
+
       this.monitorDetecting = true
       this.monitorStatusHint = '检测中：正在调用 YOLO 跌倒识别服务...'
       this.scheduleMonitorDetectionTick(0)
@@ -3026,11 +3544,94 @@ export default {
         } else {
           this.monitorStatusHint = `检测中：当前未发现跌倒（画面人数：${personCount}）。`
         }
+        
+        if (result && result.persons) {
+          this.drawYoloBoxes(result.persons)
+        } else {
+          this.drawYoloBoxes([])
+        }
       } catch (error) {
         this.monitorStatusHint = `检测服务异常：${(error && error.message) || '无法连接 YOLO 服务'}`
       } finally {
         this.monitorRequesting = false
       }
+    },
+    drawYoloBoxes(persons) {
+      const videoEl = this.resolveMonitorCameraVideoEl()
+      if (!videoEl) return
+
+      const renderWidth = videoEl.clientWidth || videoEl.offsetWidth || 0
+      const renderHeight = videoEl.clientHeight || videoEl.offsetHeight || 0
+      const videoWidth = videoEl.videoWidth || 0
+      const videoHeight = videoEl.videoHeight || 0
+      if (!renderWidth || !renderHeight || !videoWidth || !videoHeight) return
+
+      const scale = Math.max(renderWidth / videoWidth, renderHeight / videoHeight)
+      const offsetX = (renderWidth - videoWidth * scale) / 2
+      const offsetY = (renderHeight - videoHeight * scale) / 2
+      const safePersons = Array.isArray(persons) ? persons : []
+
+      const canvasEl = typeof document !== 'undefined' ? document.getElementById('yoloCanvas') : null
+      if (canvasEl && typeof canvasEl.getContext === 'function') {
+        const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
+        const targetWidth = Math.max(1, Math.round(renderWidth * dpr))
+        const targetHeight = Math.max(1, Math.round(renderHeight * dpr))
+        if (canvasEl.width !== targetWidth) {
+          canvasEl.width = targetWidth
+        }
+        if (canvasEl.height !== targetHeight) {
+          canvasEl.height = targetHeight
+        }
+
+        const ctx = canvasEl.getContext('2d')
+        if (!ctx) return
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height)
+        ctx.scale(dpr, dpr)
+
+        safePersons.forEach((person) => {
+          const bbox = person && person.bbox
+          if (!Array.isArray(bbox) || bbox.length < 4) return
+
+          const [x1, y1, x2, y2] = bbox
+          const x = x1 * scale + offsetX
+          const y = y1 * scale + offsetY
+          const w = (x2 - x1) * scale
+          const h = (y2 - y1) * scale
+
+          ctx.strokeStyle = person.is_fall ? 'red' : 'green'
+          ctx.lineWidth = 3
+          ctx.strokeRect(x, y, w, h)
+
+          ctx.fillStyle = person.is_fall ? 'red' : 'green'
+          ctx.font = '16px sans-serif'
+          ctx.fillText(`${person.status || 'Normal'}`, x, y > 20 ? y - 5 : y + 15)
+        })
+        return
+      }
+
+      const ctx = uni.createCanvasContext('yoloCanvas', this)
+      ctx.clearRect(0, 0, renderWidth, renderHeight)
+      safePersons.forEach((person) => {
+        const bbox = person && person.bbox
+        if (!Array.isArray(bbox) || bbox.length < 4) return
+
+        const [x1, y1, x2, y2] = bbox
+        const x = x1 * scale + offsetX
+        const y = y1 * scale + offsetY
+        const w = (x2 - x1) * scale
+        const h = (y2 - y1) * scale
+
+        ctx.setStrokeStyle(person.is_fall ? 'red' : 'green')
+        ctx.setLineWidth(3)
+        ctx.strokeRect(x, y, w, h)
+
+        ctx.setFillStyle(person.is_fall ? 'red' : 'green')
+        ctx.setFontSize(16)
+        ctx.fillText(`${person.status || 'Normal'}`, x, y > 20 ? y - 5 : y + 15)
+      })
+      ctx.draw()
     },
     captureMonitorFrameBlob() {
       return new Promise((resolve) => {
@@ -3071,8 +3672,14 @@ export default {
         const formData = new FormData()
         formData.append('image', frameBlob, `monitor_${Date.now()}.jpg`)
 
+        const headers = {}
+        if (this.authToken) {
+          headers.Authorization = `Bearer ${this.authToken}`
+        }
+
         fetch(this.monitorApiUrl(this.apiPaths.monitorDetectFrame), {
           method: 'POST',
+          headers,
           body: formData,
         })
           .then(async (res) => {
@@ -3237,35 +3844,394 @@ export default {
     goNextWeeklyPage() {
       this.switchWeeklyPage(this.activeWeeklyPageIndex + 1)
     },
-    buildMedicationCalendar(options = {}) {
-      const skipScheduleFocus = !!options.skipScheduleFocus
+    /**
+     * Load monthly medication cache from local storage.
+     * @returns {void}
+     */
+    loadMedicationMonthCacheFromStorage() {
+      const saved = uni.getStorageSync(this.medicationMonthCacheStorageKey)
+      if (!saved || typeof saved !== 'object') {
+        this.medicationMonthCache = {}
+        return
+      }
+
+      const nextCache = {}
+      Object.keys(saved).forEach((cacheKey) => {
+        nextCache[cacheKey] = this.cloneMedicationMonthData(saved[cacheKey])
+      })
+      this.medicationMonthCache = nextCache
+    },
+    /**
+     * Persist monthly medication cache to local storage.
+     * @returns {void}
+     */
+    persistMedicationMonthCacheToStorage() {
+      uni.setStorageSync(this.medicationMonthCacheStorageKey, this.medicationMonthCache)
+    },
+    /**
+     * Build daily storage key for reminder de-duplication state.
+     * @param {string} dateKey - Date text in YYYY-MM-DD format.
+     * @returns {string} Storage key.
+     */
+    getMedicationReminderDailyStorageKey(dateKey) {
+      return `${this.medicationReminderStoragePrefix}${dateKey}`
+    },
+    /**
+     * Build cache key for monthly medication records.
+     * @param {number} year - Calendar year.
+     * @param {number} month - Calendar month index in range [0, 11].
+     * @returns {string} Stable key formatted as YYYY-MM.
+     */
+    getMedicationMonthCacheKey(year, month) {
+      return `${year}-${String(month + 1).padStart(2, '0')}`
+    },
+    /**
+     * Clone monthly medication data to avoid cross-reference side effects.
+     * @param {{statusMap?: Object, recordsMap?: Object}} monthData - Raw month payload.
+     * @returns {{statusMap: Object, recordsMap: Object}} Deep-cloned month payload.
+     */
+    cloneMedicationMonthData(monthData = {}) {
+      const statusMap = { ...(monthData.statusMap || {}) }
+      const sourceRecordsMap = monthData.recordsMap || {}
+      const recordsMap = {}
+      Object.keys(sourceRecordsMap).forEach((day) => {
+        const records = Array.isArray(sourceRecordsMap[day]) ? sourceRecordsMap[day] : []
+        recordsMap[day] = records.map((record) => ({ ...record }))
+      })
+      return { statusMap, recordsMap }
+    },
+    /**
+     * Get month data from cache and lazily initialize fallback mock data when missing.
+     * @param {number} year - Calendar year.
+     * @param {number} month - Calendar month index in range [0, 11].
+     * @returns {{statusMap: Object, recordsMap: Object}} Cloned month data snapshot.
+     */
+    getMedicationMonthDataSnapshot(year, month) {
+      const cacheKey = this.getMedicationMonthCacheKey(year, month)
+      if (!this.medicationMonthCache[cacheKey]) {
+        this.medicationMonthCache[cacheKey] = this.cloneMedicationMonthData(
+          this.getMedicationMonthData(year, month)
+        )
+      }
+      return this.cloneMedicationMonthData(this.medicationMonthCache[cacheKey])
+    },
+    /**
+     * Persist current in-memory month state back to month cache.
+     * @returns {void}
+     */
+    persistCurrentMonthDataToCache() {
+      const cacheKey = this.getMedicationMonthCacheKey(this.currentCalendarYear, this.currentCalendarMonth)
+      this.medicationMonthCache[cacheKey] = this.cloneMedicationMonthData({
+        statusMap: this.medicationStatusMap,
+        recordsMap: this.medicationRecordsMap,
+      })
+      this.persistMedicationMonthCacheToStorage()
+    },
+    /**
+     * Check whether a calendar day is in the future compared with local today.
+     * @param {number} year - Calendar year.
+     * @param {number} month - Calendar month index in range [0, 11].
+     * @param {number} day - Day of month in range [1, 31].
+     * @returns {boolean} True if target day is after today.
+     */
+    isFutureDay(year, month, day) {
+      const today = new Date()
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const target = new Date(year, month, day)
+      return target.getTime() > todayStart.getTime()
+    },
+    /**
+     * Rebuild calendar cell list based on current month maps.
+     * @returns {void}
+     */
+    rebuildMedicationCalendarCells() {
       const year = this.currentCalendarYear
       const month = this.currentCalendarMonth
-      this.calendarMonthLabel = `${year}年${String(month + 1).padStart(2, '0')}月`
-      const monthData = this.getMedicationMonthData(year, month)
-      this.medicationStatusMap = monthData.statusMap
-      this.medicationRecordsMap = monthData.recordsMap
       const firstDay = new Date(year, month, 1).getDay()
       const offset = firstDay === 0 ? 6 : firstDay - 1
       const daysInMonth = new Date(year, month + 1, 0).getDate()
       const cells = []
 
-      for (let i = 0; i < offset; i++) {
-        cells.push({ day: 0, taken: null })
+      for (let i = 0; i < offset; i += 1) {
+        cells.push({ day: 0, taken: null, isUnrecorded: false })
       }
-      for (let day = 1; day <= daysInMonth; day++) {
-        cells.push({ day, taken: !!this.medicationStatusMap[day] })
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        cells.push({
+          day,
+          taken: !!this.medicationStatusMap[day],
+          isUnrecorded: this.isFutureDay(year, month, day),
+        })
       }
       while (cells.length % 7 !== 0) {
-        cells.push({ day: 0, taken: null })
+        cells.push({ day: 0, taken: null, isUnrecorded: false })
       }
+      this.medicationCalendarCells = cells
+    },
+    /**
+     * Update one day status by records and keep month cache in sync.
+     * @param {number} day - Day of month in range [1, 31].
+     * @param {Array<Object>} records - Medication records for that day.
+     * @returns {void}
+     */
+    updateDayMedicationStatus(day, records = []) {
+      if (!day) return
+      const safeRecords = Array.isArray(records) ? records : []
+      this.medicationStatusMap[day] = safeRecords.length ? safeRecords.every((item) => !!item.taken) : false
+    },
+    /**
+     * Convert HH:mm to minutes from start of day.
+     * @param {string} timeText - Time string in HH:mm format.
+     * @returns {number} Minutes value or -1 when format invalid.
+     */
+    parseTimeToMinutes(timeText) {
+      if (!timeText || typeof timeText !== 'string') return -1
+      const match = timeText.trim().match(/^(\d{2}):(\d{2})$/)
+      if (!match) return -1
+      const hour = Number(match[1])
+      const minute = Number(match[2])
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return -1
+      return hour * 60 + minute
+    },
+    /**
+     * Build date key in YYYY-MM-DD format.
+     * @param {Date} dateObj - Date instance.
+     * @returns {string} Date key.
+     */
+    buildDateKey(dateObj) {
+      const year = dateObj.getFullYear()
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0')
+      const day = String(dateObj.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    },
+    /**
+     * Collect medication reminder slots for a target date.
+     * @param {Date} dateObj - Target date.
+     * @returns {Array<{time: string, minutes: number, taken: boolean}>} Sorted slot list.
+     */
+    getMedicationReminderSlots(dateObj) {
+      const year = dateObj.getFullYear()
+      const month = dateObj.getMonth()
+      const day = dateObj.getDate()
+      const monthData = this.getMedicationMonthDataSnapshot(year, month)
+      const dayRecords = Array.isArray(monthData.recordsMap[day]) ? monthData.recordsMap[day] : []
+      const recordMap = dayRecords.reduce((acc, record) => {
+        if (record && record.time) {
+          acc[record.time] = record
+        }
+        return acc
+      }, {})
+
+      const scheduleTimes = this.scheduleItems.map((item) => item.time).filter(Boolean)
+      const recordTimes = dayRecords.map((item) => item.time).filter(Boolean)
+      const uniqueTimes = Array.from(new Set(scheduleTimes.concat(recordTimes)))
+
+      return uniqueTimes
+        .map((time) => {
+          const minutes = this.parseTimeToMinutes(time)
+          const record = recordMap[time]
+          return {
+            time,
+            minutes,
+            taken: record ? !!record.taken : false,
+          }
+        })
+        .filter((item) => item.minutes >= 0)
+        .sort((a, b) => a.minutes - b.minutes)
+    },
+    /**
+     * Update top status hint based on today's pending medication slots.
+     * @param {Date} now - Current local date-time.
+     * @returns {void}
+     */
+    updateMedicationStatusHint(now = new Date()) {
+      const slots = this.getMedicationReminderSlots(now)
+      if (!slots.length) {
+        this.medicationStatus = '今日暂无服药计划'
+        return
+      }
+      const nowMinutes = now.getHours() * 60 + now.getMinutes()
+      const pendingSlots = slots.filter((slot) => !slot.taken)
+      const nextPending = pendingSlots.find((slot) => slot.minutes >= nowMinutes)
+
+      if (nextPending) {
+        this.medicationStatus = `下一次用药在 ${nextPending.time}`
+        return
+      }
+      if (pendingSlots.length) {
+        this.medicationStatus = '今日仍有未服药记录'
+        return
+      }
+      this.medicationStatus = '今日服药已完成'
+    },
+    /**
+     * Stop and destroy reminder ringtone context if it exists.
+     * @returns {void}
+     */
+    stopMedicationReminderSound() {
+      const reminderContext = this.medicationReminderAudioContext
+      if (!reminderContext) {
+        return
+      }
+      this.medicationReminderAudioContext = null
+      try {
+        reminderContext.stop()
+      } catch (error) {
+      }
+      try {
+        reminderContext.destroy()
+      } catch (error) {
+      }
+    },
+    /**
+     * Play medication reminder ringtone once from the sound directory.
+     * @returns {void}
+     */
+    playMedicationReminderSound() {
+      if (!this.medicationReminderSoundEnabled) {
+        return
+      }
+      if (typeof uni.createInnerAudioContext !== 'function') {
+        return
+      }
+
+      this.stopMedicationReminderSound()
+
+      const reminderContext = uni.createInnerAudioContext()
+      this.medicationReminderAudioContext = reminderContext
+      reminderContext.autoplay = false
+      reminderContext.src = this.medicationReminderSoundSrc
+
+      reminderContext.onEnded(() => {
+        if (this.medicationReminderAudioContext === reminderContext) {
+          this.medicationReminderAudioContext = null
+        }
+        try {
+          reminderContext.destroy()
+        } catch (error) {
+        }
+      })
+
+      reminderContext.onError(() => {
+        if (this.medicationReminderAudioContext === reminderContext) {
+          this.medicationReminderAudioContext = null
+        }
+        try {
+          reminderContext.destroy()
+        } catch (error) {
+        }
+      })
+
+      try {
+        reminderContext.play()
+      } catch (error) {
+        if (this.medicationReminderAudioContext === reminderContext) {
+          this.medicationReminderAudioContext = null
+        }
+        try {
+          reminderContext.destroy()
+        } catch (destroyError) {
+        }
+      }
+    },
+    /**
+     * Show alarm notification when a medication slot reaches trigger minute.
+     * @param {string} timeText - Triggered medication time in HH:mm.
+     * @returns {void}
+     */
+    triggerMedicationAlarm(timeText) {
+      this.playMedicationReminderSound()
+      if (typeof uni.vibrateShort === 'function') {
+        try {
+          uni.vibrateShort()
+        } catch (error) {
+        }
+      }
+      if (typeof uni.showModal === 'function') {
+        uni.showModal({
+          title: '服药提醒',
+          content: `现在是 ${timeText}，请按时服药。`,
+          showCancel: false,
+        })
+        return
+      }
+      uni.showToast({ title: `服药提醒 ${timeText}`, icon: 'none' })
+    },
+    /**
+     * Execute one reminder tick, avoid duplicate alarms in same day and minute.
+     * @returns {void}
+     */
+    runMedicationReminderCheck() {
+      const now = new Date()
+      const dateKey = this.buildDateKey(now)
+      if (this.medicationReminderDateKey !== dateKey) {
+        this.medicationReminderDateKey = dateKey
+        const savedReminderMap = uni.getStorageSync(this.getMedicationReminderDailyStorageKey(dateKey))
+        this.medicationReminderShownMap =
+          savedReminderMap && typeof savedReminderMap === 'object'
+            ? { ...savedReminderMap }
+            : {}
+      }
+
+      const minuteText = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      const minuteKey = `${dateKey} ${minuteText}`
+      if (this.medicationReminderLastMinuteKey === minuteKey) {
+        return
+      }
+      this.medicationReminderLastMinuteKey = minuteKey
+
+      const slots = this.getMedicationReminderSlots(now)
+      const matched = slots.find((slot) => slot.time === minuteText && !slot.taken)
+      if (matched) {
+        const alarmKey = `${dateKey}_${matched.time}`
+        if (!this.medicationReminderShownMap[alarmKey]) {
+          this.medicationReminderShownMap[alarmKey] = true
+          uni.setStorageSync(
+            this.getMedicationReminderDailyStorageKey(dateKey),
+            this.medicationReminderShownMap
+          )
+          this.triggerMedicationAlarm(matched.time)
+        }
+      }
+
+      this.updateMedicationStatusHint(now)
+    },
+    /**
+     * Start medication reminder loop while current page is active.
+     * @returns {void}
+     */
+    startMedicationReminderLoop() {
+      this.stopMedicationReminderLoop()
+      this.runMedicationReminderCheck()
+      this.medicationReminderTimer = setInterval(() => {
+        this.runMedicationReminderCheck()
+      }, 15000)
+    },
+    /**
+     * Stop medication reminder loop.
+     * @returns {void}
+     */
+    stopMedicationReminderLoop() {
+      if (this.medicationReminderTimer) {
+        clearInterval(this.medicationReminderTimer)
+        this.medicationReminderTimer = null
+      }
+      this.stopMedicationReminderSound()
+    },
+    buildMedicationCalendar(options = {}) {
+      const skipScheduleFocus = !!options.skipScheduleFocus
+      const year = this.currentCalendarYear
+      const month = this.currentCalendarMonth
+      this.calendarMonthLabel = `${year}年${String(month + 1).padStart(2, '0')}月`
+      const monthData = this.getMedicationMonthDataSnapshot(year, month)
+      this.medicationStatusMap = monthData.statusMap
+      this.medicationRecordsMap = monthData.recordsMap
+      this.rebuildMedicationCalendarCells()
       const today = new Date()
       const isCurrentMonth =
         year === today.getFullYear() &&
         month === today.getMonth()
       const defaultDay = isCurrentMonth ? today.getDate() : 1
 
-      this.medicationCalendarCells = cells
       this.selectedCalendarDay = defaultDay
       this.selectedCalendarDetail = this.buildSelectedDayDetail(defaultDay)
       const records = this.selectedCalendarDetail.records || []
@@ -3273,6 +4239,7 @@ export default {
       if (!skipScheduleFocus && targetRecord && targetRecord.time) {
         this.focusScheduleByTime(targetRecord.time)
       }
+      this.updateMedicationStatusHint()
     },
     goPrevMonth() {
       const target = new Date(this.currentCalendarYear, this.currentCalendarMonth - 1, 1)
@@ -3342,6 +4309,7 @@ export default {
     confirmScheduleFieldEdit() {
       const time = this.scheduleEditTime
       const field = this.scheduleEditField
+      const day = this.selectedCalendarDay
       if (!time || !field) {
         this.closeScheduleFieldEditor()
         return
@@ -3371,7 +4339,6 @@ export default {
           this.scheduleItems.sort((a, b) => String(a.time).localeCompare(String(b.time)))
         }
 
-        const day = this.selectedCalendarDay
         const dayRecords = Array.isArray(this.medicationRecordsMap[day])
           ? this.medicationRecordsMap[day].map((record) => ({ ...record }))
           : []
@@ -3381,7 +4348,12 @@ export default {
           dayRecords.sort((a, b) => String(a.time).localeCompare(String(b.time)))
           this.medicationRecordsMap[day] = dayRecords
           this.selectedCalendarDetail = this.buildSelectedDayDetail(day)
+          this.updateDayMedicationStatus(day, dayRecords)
         }
+
+        this.persistCurrentMonthDataToCache()
+        this.rebuildMedicationCalendarCells()
+        this.updateMedicationStatusHint()
 
         this.closeScheduleFieldEditor()
         this.focusScheduleByTime(nextTime)
@@ -3398,19 +4370,75 @@ export default {
         }
       }
 
-      const day = this.selectedCalendarDay
       const dayRecords = Array.isArray(this.medicationRecordsMap[day])
         ? this.medicationRecordsMap[day].map((record) => ({ ...record }))
         : []
-      const recordIndex = dayRecords.findIndex((record) => record.time === time)
-      if (recordIndex >= 0 && (field === 'medicine' || field === 'mood')) {
-        dayRecords[recordIndex][field] = normalized === '—' ? '' : normalized
-        this.medicationRecordsMap[day] = dayRecords
-        this.selectedCalendarDetail = this.buildSelectedDayDetail(day)
+      let recordIndex = dayRecords.findIndex((record) => record.time === time)
+      if (recordIndex < 0) {
+        dayRecords.push({ time })
+        recordIndex = dayRecords.length - 1
       }
+      const recordValue =
+        (field === 'medicine' || field === 'mood') && normalized === '—'
+          ? ''
+          : normalized
+      dayRecords[recordIndex][field] = recordValue
+      this.medicationRecordsMap[day] = dayRecords
+      this.selectedCalendarDetail = this.buildSelectedDayDetail(day)
+      this.updateDayMedicationStatus(day, dayRecords)
+
+      this.persistCurrentMonthDataToCache()
+      this.rebuildMedicationCalendarCells()
+      this.updateMedicationStatusHint()
 
       this.closeScheduleFieldEditor()
       uni.showToast({ title: '已更新日程', icon: 'success' })
+    },
+    /**
+     * Toggle medication taken flag for selected day and slot.
+     * @param {{time: string, medicine?: string, mood?: string}} item - Displayed schedule row payload.
+     * @returns {void}
+     */
+    toggleScheduleTaken(item) {
+      if (!item || !item.time) return
+      const day = this.selectedCalendarDay
+      if (!day) return
+      if (this.isCalendarCellAfterToday(day)) {
+        uni.showToast({ title: '未来日期不可提前标记已服药', icon: 'none' })
+        return
+      }
+
+      const safeMedicine = item.medicine && item.medicine !== '待补充' ? item.medicine : '待补充'
+      const safeMood = item.mood && item.mood !== '—' ? item.mood : ''
+      const dayRecords = Array.isArray(this.medicationRecordsMap[day])
+        ? this.medicationRecordsMap[day].map((record) => ({ ...record }))
+        : []
+      const recordIndex = dayRecords.findIndex((record) => record.time === item.time)
+
+      let nextTaken = true
+      if (recordIndex >= 0) {
+        nextTaken = !dayRecords[recordIndex].taken
+        dayRecords[recordIndex] = {
+          ...dayRecords[recordIndex],
+          taken: nextTaken,
+        }
+      } else {
+        dayRecords.push({
+          time: item.time,
+          medicine: safeMedicine,
+          mood: safeMood,
+          taken: true,
+        })
+      }
+
+      dayRecords.sort((a, b) => String(a.time).localeCompare(String(b.time)))
+      this.medicationRecordsMap[day] = dayRecords
+      this.updateDayMedicationStatus(day, dayRecords)
+      this.persistCurrentMonthDataToCache()
+      this.rebuildMedicationCalendarCells()
+      this.selectedCalendarDetail = this.buildSelectedDayDetail(day)
+      this.updateMedicationStatusHint()
+      uni.showToast({ title: nextTaken ? '已标记为已服药' : '已标记为未服药', icon: 'success' })
     },
     compareCalendarDayWithToday(day) {
       if (!day) return 0
@@ -3512,6 +4540,15 @@ export default {
       if (savedProfile && typeof savedProfile === 'object') {
         this.profile = { ...this.profile, ...savedProfile }
       }
+
+      if (!this.profile.emergencyEmail && typeof this.profile.emergencyPhone === 'string') {
+        const legacy = this.profile.emergencyPhone.trim()
+        const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(legacy)
+        if (validEmail) {
+          this.profile.emergencyEmail = legacy
+        }
+      }
+
       const elderMode = uni.getStorageSync('carepal_elderMode')
       const darkMode = uni.getStorageSync('carepal_darkMode')
       this.elderMode = !!elderMode
@@ -3675,6 +4712,10 @@ export default {
 .carepal-page.is-elder .carepal-weekly-question-item,
 .carepal-page.is-elder .carepal-weekly-result-text {
   font-size: 38rpx;
+}
+
+.carepal-page.is-elder .carepal-weekly-result-encouragement {
+  font-size: 46rpx;
 }
 
 .carepal-page.is-elder .carepal-weekly-score-title {
@@ -3991,6 +5032,13 @@ export default {
   border-color: rgba(252, 165, 165, 0.45);
 }
 
+.carepal-page.is-dark .carepal-calendar-cell.is-unrecorded {
+  background: transparent;
+  border: none;
+  border-radius: 18rpx;
+  box-shadow: none;
+}
+
 .carepal-page.is-dark .carepal-calendar-cell.is-empty {
   border: none;
   box-shadow: none;
@@ -4010,6 +5058,10 @@ export default {
 .carepal-page.is-dark .carepal-calendar-cell.is-after-today .carepal-calendar-day {
   font-size: 36rpx;
   color: var(--cp-text-secondary);
+}
+
+.carepal-page.is-dark .carepal-calendar-day-note {
+  color: rgba(230, 238, 252, 0.82);
 }
 
 .carepal-page.is-dark .carepal-calendar-detail {
@@ -4262,7 +5314,8 @@ export default {
 
 .carepal-monitor-view {
   width: 100%;
-  height: 720rpx;
+  height: auto;
+  aspect-ratio: 16 / 9;
   border-radius: 24rpx;
   overflow: hidden;
   border: 1rpx solid rgba(76, 157, 255, 0.25);
@@ -4346,10 +5399,6 @@ export default {
   .carepal-monitor-layout {
     grid-template-columns: 1fr;
     min-height: 0;
-  }
-
-  .carepal-monitor-view {
-    height: 500rpx;
   }
 }
 
@@ -5280,15 +6329,33 @@ export default {
   border-color: rgba(236, 104, 104, 0.32);
 }
 
+.carepal-calendar-cell.is-unrecorded {
+  border-radius: 18rpx;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
 .carepal-calendar-day {
   font-size: 32rpx;
   color: var(--cp-text-secondary);
   font-weight: 600;
 }
 
+.carepal-calendar-day-note {
+  margin-top: 2rpx;
+  font-size: 18rpx;
+  line-height: 1.2;
+  color: #7a8fa9;
+}
+
 .carepal-calendar-cell.is-selected .carepal-calendar-day {
   color: #ffffff;
   text-shadow: 0 2rpx 6rpx rgba(16, 95, 171, 0.3);
+}
+
+.carepal-calendar-cell.is-selected .carepal-calendar-day-note {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .carepal-calendar-cell.is-before-today .carepal-calendar-day {
@@ -5402,6 +6469,17 @@ export default {
   border: 1rpx solid transparent;
   white-space: nowrap;
   line-height: 1.2;
+}
+
+.carepal-status-pill.is-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.carepal-status-pill.is-clickable:hover {
+  transform: translateY(-1rpx);
+  box-shadow: 0 3rpx 8rpx rgba(30, 64, 175, 0.18);
 }
 
 .carepal-status-pill::before {
@@ -6178,6 +7256,17 @@ export default {
   line-height: 1.7;
 }
 
+.carepal-weekly-result-encouragement {
+  margin-top: 14rpx;
+  padding-top: 10rpx;
+  border-top: 1rpx solid rgba(80, 122, 197, 0.16);
+  white-space: pre-line;
+  font-size: 44rpx;
+  line-height: 1.7;
+  font-weight: 700;
+  color: var(--cp-text-primary);
+}
+
 .carepal-page.is-dark .carepal-weekly-card,
 .carepal-page.is-dark .carepal-weekly-result {
   background: rgba(255, 255, 255, 0.08);
@@ -6202,6 +7291,11 @@ export default {
 .carepal-page.is-dark .carepal-weekly-score-item {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.18);
+}
+
+.carepal-page.is-dark .carepal-weekly-result-encouragement {
+  border-top-color: rgba(255, 255, 255, 0.2);
+  color: rgba(241, 245, 255, 0.95);
 }
 
 .carepal-page.is-dark .carepal-weekly-auto-week,

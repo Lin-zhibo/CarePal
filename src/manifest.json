@@ -20,6 +20,26 @@
         "modules" : {},
         /* 应用发布信息 */
         "distribute" : {
+            "icons" : {
+                "android" : {
+                    "mdpi" : "static/img/logo.png",
+                    "hdpi" : "static/img/logo.png",
+                    "xhdpi" : "static/img/logo.png",
+                    "xxhdpi" : "static/img/logo.png",
+                    "xxxhdpi" : "static/img/logo.png"
+                },
+                "ios" : {
+                    "appstore" : "static/img/logo.png",
+                    "iphone" : {
+                        "app@2x" : "static/img/logo.png",
+                        "app@3x" : "static/img/logo.png"
+                    },
+                    "ipad" : {
+                        "app" : "static/img/logo.png",
+                        "app@2x" : "static/img/logo.png"
+                    }
+                }
+            },
             /* android打包配置 */
             "android" : {
                 "permissions" : [

@@ -3,13 +3,15 @@
 		{
 			"path": "pages/index/index",
 			"style": {
-				"navigationBarTitleText": "uni-app"
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "CarePal康伴"
 			}
 		}
 	],
 	"globalStyle": {
+		"navigationStyle": "custom",
 		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "uni-app",
+		"navigationBarTitleText": "CarePal康伴",
 		"navigationBarBackgroundColor": "#F8F8F8",
 		"backgroundColor": "#F8F8F8"
 	}

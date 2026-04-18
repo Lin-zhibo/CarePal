@@ -43,14 +43,34 @@
 
 请求 JSON：
 
-| 字段     | 类型   | 必填 | 说明           |
-| -------- | ------ | ---- | -------------- |
-| username | string | 是   | 用户名（3-64） |
-| password | string | 是   | 密码（6-128）  |
+| 字段                    | 类型   | 必填 | 说明                    |
+| ----------------------- | ------ | ---- | ----------------------- |
+| username                | string | 是   | 用户名（3-64）          |
+| password                | string | 是   | 密码（6-128）           |
+| emergency_contact_name  | string | 是   | 紧急联系人姓名（1-128） |
+| emergency_contact_email | string | 是   | 紧急联系人邮箱（3-255） |
 
 ### POST `/auth/login`
 
-请求 JSON 同上。
+请求 JSON：
+
+| 字段     | 类型   | 必填 | 说明   |
+| -------- | ------ | ---- | ------ |
+| username | string | 是   | 用户名 |
+| password | string | 是   | 密码   |
+
+### GET `/auth/emergency-contact`
+
+用途：通过当前 token 获取该用户已保存的紧急联系人信息。
+
+响应 JSON：
+
+```json
+{
+  "emergency_contact_name": "张三",
+  "emergency_contact_email": "zhangsan@example.com"
+}
+```
 
 注册/登录响应：
 
@@ -142,7 +162,7 @@ JSON 响应字段：
 
 ---
 
-## 7. OCR 图片分析（多Agent）
+## 7. OCR 图片分析（单Agent）
 
 ### POST `/ocr/analyze`
 
@@ -156,18 +176,66 @@ JSON 响应字段：
 
 响应 JSON：
 
-| 字段           | 类型        | 说明                                               |
-| -------------- | ----------- | -------------------------------------------------- |
-| text           | string      | 返回给前端的最终文本（仅Agent3结果，已做格式清洗） |
-| audio_file_url | string/null | with_audio=true 且TTS成功时返回                    |
+| 字段           | 类型        | 说明                                                      |
+| -------------- | ----------- | --------------------------------------------------------- |
+| text           | string      | 返回给前端的最终文本（由单Agent输出解析后，已做格式清洗） |
+| audio_file_url | string/null | with_audio=true 且TTS成功时返回                           |
 
 说明：
 
-- Agent1：使用 OCR 视觉模型（`OCR_AGENT_1_MODEL`）
-- Agent2/3：使用通用 LLM（`LLM_MODEL=4.0Ultra`）
-- OCR 返回给前端仅保留清洗后的 Agent3 文本，便于前端展示与 TTS。
+- 使用 OCR 视觉模型（`OCR_AGENT_1_MODEL`）直接完成识别与分析。
+- 服务端会解析 `<professional_analysis>` 与 `<plain_text>`，最终对前端返回 `plain_text`。
 
-## 8. 快速调用示例
+---
+
+## 8. 紧急告警监听协议（前端/设备对接）
+
+说明：该能力不是 HTTP API，而是后端启动后在 `ALERT_LISTENER_HOST:ALERT_LISTENER_PORT` 上监听 TCP 报文。
+
+### 报文格式
+
+发送 UTF-8 JSON 字符串，最少包含 `token`：
+
+```json
+{
+  "type": "emergency_fall_alert",
+  "version": "1.0",
+  "token": "<jwt-token>"
+}
+```
+
+字段约定：
+
+| 字段    | 必填 | 说明                                             |
+| ------- | ---- | ------------------------------------------------ |
+| token   | 是   | 用户 JWT，后端据此解析用户名并查库获取紧急联系人 |
+| type    | 否   | 若传入，必须为 `emergency_fall_alert`          |
+| version | 否   | 协议版本，当前建议 `1.0`                       |
+
+### 邮件发送规则
+
+- 后端通过 `token` 找到用户，再读取该用户的 `emergency_contact_name` 与 `emergency_contact_email`。
+- 发送目标：该用户对应的紧急联系人邮箱。
+- 默认邮件正文模板：`（{contact_name}）你好，你家里的老人（{username}）可能刚才跌倒了，请尽快打电话确认老人情况！！！`
+- 模板变量替换：
+  - `{contact_name}` -> 数据库中的紧急联系人姓名
+  - `{username}` -> 当前用户用户名
+
+### 相关环境变量
+
+- `ALERT_LISTENER_HOST`
+- `ALERT_LISTENER_PORT`
+- `ALERT_EMAIL_SUBJECT`
+- `ALERT_EMAIL_BODY`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_SENDER_EMAIL`
+- `SMTP_USE_SSL`
+- `SMTP_USE_TLS`
+
+## 9. 快速调用示例
 
 ### 8.1 文本对话
 

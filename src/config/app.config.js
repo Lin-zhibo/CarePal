@@ -3,7 +3,7 @@
 // 改端口时，只需要修改 BACKEND_SERVER.port。
 const BACKEND_SERVER = Object.freeze({
   protocol: 'http',
-  host: '192.168.137.79',
+  host: '10.201.100.207',
   port: 8000,
 })
 
@@ -70,7 +70,7 @@ export const APP_CONFIG = Object.freeze({
       name: '康复小伙伴',
       phone: '13800000000',
       emergencyName: '',
-      emergencyPhone: '',
+      emergencyEmail: '',
     }),
     moduleList: Object.freeze([
       Object.freeze({ key: 'chat', label: '对话', desc: '与 AI 对话，解读用药与康复', icon: '/static/icons/chat.svg' }),
@@ -86,7 +86,7 @@ export const APP_CONFIG = Object.freeze({
     chatMessageMaxLength: 300,
     weeklyNoteMaxLength: 1000,
     phoneMaxLength: 11,
-    emergencyPhoneMaxLength: 11,
+    emergencyEmailMaxLength: 80,
   }),
 
   // 鉴权规则

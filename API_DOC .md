@@ -310,4 +310,51 @@ except FileNotFoundError:
 
 ---
 
+## 11. 紧急告警监听协议（前端/设备对接）
+
+说明：该能力不是 HTTP API，而是 YOLO 后端在检测到跌倒后，向监听端发送 TCP 报文。
+
+### 11.1 触发条件
+
+- YOLO 检测接口：`POST http://127.0.0.1:8010/detect/frame`
+- 当返回 `has_fall=true` 时触发告警发送
+- 请求头建议携带 `Authorization: Bearer <access_token>`，用于透传 token
+
+### 11.2 监听地址
+
+- 监听主机优先级：
+  1. 环境变量 `ALERT_LISTENER_HOST`
+  2. `src/config/app.config.js` 中 `BACKEND_SERVER.host`
+  3. 默认 `127.0.0.1`
+- 监听端口：`9001`
+
+### 11.3 报文格式
+
+发送 UTF-8 JSON 字符串，最少包含以下字段：
+
+```json
+{
+  "type": "emergency_fall_alert",
+  "version": "1.0",
+  "token": "<jwt-token>"
+}
+```
+
+字段约定：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| token | 是 | 用户 JWT，用于后端解析身份 |
+| type | 是 | 固定 `emergency_fall_alert` |
+| version | 是 | 协议版本，当前为 `1.0` |
+
+当前实现还会附带：`timestamp`、`condition`、`fall_count`、`person_count`。
+
+### 11.4 冷却策略
+
+- 全局冷却窗口：`180` 秒（3 分钟）
+- 在冷却窗口内再次检测到跌倒，不重复发送告警报文
+
+---
+
 如文档需要补充详细响应字段、参数约束规则，请反馈。接口如有调整请同步更新本文件！

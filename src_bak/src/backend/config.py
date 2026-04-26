@@ -8,9 +8,9 @@ from dotenv import load_dotenv
 
 
 # 统一在这里加载环境变量，后端各模块都从同一份配置读取。
-ROOT_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(ROOT_DIR / ".env")
-load_dotenv(ROOT_DIR / "doc" / ".env")
+r01 = Path(__file__).resolve().parents[2]
+load_dotenv(r01 / ".env")
+load_dotenv(r01 / "doc" / ".env")
 
 
 @dataclass
@@ -25,12 +25,6 @@ class BackendSettings:
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "change-this-in-prod")
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
     jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
-
-    # RAG 配置（后端直接读取，供启动同步和动态写入使用）
-    rag_enabled: bool = os.getenv("RAG_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
-    rag_db_path: str = os.getenv("RAG_DB_PATH", "db/chroma")
-    rag_state_db_path: str = os.getenv("RAG_STATE_DB_PATH", "db/rag_sync_state.db")
-    rag_data_dir: str = os.getenv("RAG_DATA_DIR", "data")
 
     # 紧急告警监听配置（TCP）
     alert_listener_host: str = os.getenv("ALERT_LISTENER_HOST", "127.0.0.1")

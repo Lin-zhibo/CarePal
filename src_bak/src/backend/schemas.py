@@ -67,5 +67,3 @@ class VoiceChatMetaResponse(BaseModel):
 class OCRAnalyzeResponse(BaseModel):
     text: str
     audio_file_url: str | None = None
-    medication_json: dict | None = None
-    rag_ingested_count: int | None = None

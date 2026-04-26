@@ -22,7 +22,6 @@ from .prompts import (
 class OCRResult:
     # 对外只暴露给前端展示用的文本。
     text: str
-    professional_analysis: str | None = None
     medication_json: dict[str, Any] | None = None
     medication_json_path: Path | None = None
 
@@ -301,6 +300,49 @@ class OCRMultiAgentService:
         output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return output_path
 
+    def analyze_images(
+        self,
+        session_key: str,
+        image_paths: list[Path],
+        prompt: str | None = None,
+        task: str = "analysis",
+    ) -> OCRResult:
+        # [AI生成代码-接口暴露部分]
+        # 该方法是后端 /ocr/analyze 路由直接调用的 OCR 暴露接口。
+        if task == "extract":
+            return self.extract_medication_info(session_key=session_key, image_paths=image_paths, prompt=prompt)
+        if task != "analysis":
+            raise ValueError("task 仅支持 analysis 或 extract。")
+
+        session_lock = self._get_session_lock(session_key)
+        with session_lock:
+            user_prompt = (prompt or "").strip() or DEFAULT_PROMPT
+            history = self._history(session_key)
+            history_text = self._format_history(history)
+            image_content = self._build_image_content(
+                image_paths,
+                user_prompt,
+                history_text,
+                task_description="请综合所有图片内容完成药品识别和帕金森相关分析。",
+            )
+
+            result_text = self._run_agent(
+                self.settings.agent_1_model_name,
+                SINGLE_AGENT_SYSTEM_PROMPT,
+                image_content,
+            )
+            parsed_result = self._parse_merged_agent_response(result_text)
+
+            history.append(
+                {
+                    "user": user_prompt,
+                    "analysis": parsed_result.professional_analysis,
+                    "plain_text": parsed_result.plain_text,
+                }
+            )
+            cleaned = self._clean_final_text(parsed_result.plain_text)
+            return OCRResult(text=cleaned)
+
     def extract_medication_info(
         self,
         session_key: str,
@@ -339,34 +381,4 @@ class OCRMultiAgentService:
                 text=medication_json_text,
                 medication_json=medication_json,
                 medication_json_path=medication_json_path,
-            )
-
-    def analyze_images(self, session_key: str, image_paths: list[Path], prompt: str | None = None) -> OCRResult:
-        # [AI生成代码-接口暴露部分]
-        # 该方法是后端 /ocr/analyze 路由直接调用的 OCR 暴露接口。
-        session_lock = self._get_session_lock(session_key)
-        with session_lock:
-            user_prompt = (prompt or "").strip() or DEFAULT_PROMPT
-            history = self._history(session_key)
-            history_text = self._format_history(history)
-            image_content = self._build_image_content(image_paths, user_prompt, history_text)
-
-            result_text = self._run_agent(
-                self.settings.agent_1_model_name,
-                SINGLE_AGENT_SYSTEM_PROMPT,
-                image_content,
-            )
-            parsed_result = self._parse_merged_agent_response(result_text)
-
-            history.append(
-                {
-                    "user": user_prompt,
-                    "analysis": parsed_result.professional_analysis,
-                    "plain_text": parsed_result.plain_text,
-                }
-            )
-            professional_analysis = parsed_result.professional_analysis.strip()
-            return OCRResult(
-                text=professional_analysis,
-                professional_analysis=professional_analysis,
             )

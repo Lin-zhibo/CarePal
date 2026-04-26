@@ -623,11 +623,12 @@ class SimpleRAGStore:
         previous_state = self._load_state_map()
 
         logger.info(
-            "Starting incremental RAG sync on startup: files=%d data_dir=%s db_path=%s",
+            "Starting full RAG rebuild on startup: files=%d data_dir=%s db_path=%s",
             len(current_files),
             data_dir,
             self.db_path,
         )
+        self._reset_all_vector_datasets()
 
         report = SyncReport(
             added_files=[],
@@ -638,31 +639,6 @@ class SimpleRAGStore:
         )
 
         current_paths = set(current_files.keys())
-
-        def _is_dynamic_source(path_key: str) -> bool:
-            # 动态写入（如 OCR 运行时入库）不属于 data 目录文件，不应在启动同步时清理。
-            return path_key.startswith("ocr_medication_dynamic::")
-
-        removed_paths = sorted(
-            path for path in (set(previous_state.keys()) - current_paths) if not _is_dynamic_source(path)
-        )
-
-        for relative_path in removed_paths:
-            state = previous_state.get(relative_path)
-            if state is None:
-                continue
-            dataset_dir = Path(state.dataset_dir)
-            try:
-                if dataset_dir.exists():
-                    shutil.rmtree(dataset_dir, ignore_errors=True)
-            except OSError:
-                logger.exception("Failed to remove stale dataset during RAG sync: %s", dataset_dir)
-            try:
-                self._delete_state_entry(relative_path)
-            except sqlite3.Error:
-                logger.exception("Failed to delete stale state entry during RAG sync: %s", relative_path)
-            report.removed_files.append(relative_path)
-
         for relative_path in sorted(current_paths):
             file_path = current_files[relative_path]
             try:
@@ -670,10 +646,6 @@ class SimpleRAGStore:
             except OSError:
                 logger.exception("Failed to hash file during RAG sync: %s", file_path)
                 report.skipped_files.append(relative_path)
-                continue
-
-            prev = previous_state.get(relative_path)
-            if prev is not None and prev.content_hash == content_hash:
                 continue
 
             try:
@@ -689,7 +661,7 @@ class SimpleRAGStore:
                     dataset_dir=indexed_dataset_dir,
                 )
                 report.indexed_chunks += chunk_count
-                if prev is not None:
+                if relative_path in previous_state:
                     report.updated_files.append(relative_path)
                     change_type = "updated"
                 else:
@@ -705,6 +677,8 @@ class SimpleRAGStore:
             except (json.JSONDecodeError, OSError, RuntimeError, ValueError, sqlite3.Error, OpenAIError):
                 logger.exception("Failed to index file during RAG sync: %s", file_path)
                 report.skipped_files.append(relative_path)
+
+        report.removed_files.extend(sorted(set(previous_state.keys()) - current_paths))
 
         logger.info(
             "RAG sync summary: added=%d updated=%d removed=%d skipped=%d indexed_chunks=%d",

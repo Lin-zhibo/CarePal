@@ -1,4 +1,22 @@
 {
     "model": "yolo26x-pose.pt",
-    "models_dir": "models"
+    "models_dir": "models",
+    "dataset_roots": [
+        "dataset/GMDCSA24-A-Dataset-for-Human-Fall-Detection-in-Videos-v2.1",
+        "dataset/shahliza27/ur-fall-detection-dataset",
+        "dataset/tuyenldvn/falldataset-imvia"
+    ],
+    "cache_dir": "/tmp/ne",
+    "cache_force_rebuild": false,
+    "STGCN_in_channels": 3,
+    "STGCN_num_classes": 2,
+    "STGCN_window_size": 30,
+    "STGCN_stride": 15,
+    "STGCN_hidden_dims": [64, 128, 256],
+    "STGCN_dropout": 0.5,
+    "STGCN_epochs": 200,
+    "STGCN_batch_size": 32,
+    "STGCN_lr": 0.001,
+    "STGCN_n_folds": 8,
+    "STGCN_fall_streak_threshold": 5
 }

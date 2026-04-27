@@ -13,15 +13,6 @@ const DEV_API_BASE = '/api'
 // 生产环境直连后端地址。
 const PROD_API_BASE = `${BACKEND_SERVER.protocol}://${BACKEND_SERVER.host}:${BACKEND_SERVER.port}`
 
-const MONITOR_SERVER = Object.freeze({
-  protocol: 'http',
-  host: BACKEND_SERVER.host,
-  port: 8010,
-})
-
-const DEV_MONITOR_API_BASE = '/yoloapi'
-const PROD_MONITOR_API_BASE = `${MONITOR_SERVER.protocol}://${MONITOR_SERVER.host}:${MONITOR_SERVER.port}`
-
 export const APP_CONFIG = Object.freeze({
   APP_NAME: 'CarePal',
   APP_TITLE: 'CarePal 康伴 · 健康控制台',
@@ -33,8 +24,6 @@ export const APP_CONFIG = Object.freeze({
 
   // 仅用于展示与排查，业务请求仍以 API_BASE_URL 为准。
   BACKEND_SERVER,
-  MONITOR_SERVER,
-  MONITOR_API_BASE: import.meta.env.DEV ? DEV_MONITOR_API_BASE : PROD_MONITOR_API_BASE,
 
   API_PATHS: Object.freeze({
     health: '/health',
@@ -44,7 +33,6 @@ export const APP_CONFIG = Object.freeze({
     chatVoice: '/chat/voice',
     chatVoiceFilePrefix: '/chat/voice/file/',
     ocrAnalyze: '/ocr/analyze',
-    monitorDetectFrame: '/detect/frame',
   }),
 
   PROMPT_IDS: Object.freeze({

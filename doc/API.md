@@ -1,31 +1,27 @@
-# 后端 API 使用说明（完整）
-
-本文档覆盖当前项目全部后端接口，包含参数定义、返回结构、调用示例及前后端对接要点。
+# 后端接口文档（前端对接）
 
 基础地址：`http://127.0.0.1:8000`
 
-## 1. 认证与全局约定
+认证规则：
+- 除 `/health`、`/auth/register`、`/auth/login`、`/auth/login_weixin` 外，其余接口都需要 JWT。
+- Header：`Authorization: Bearer <access_token>`
 
-- 除 `/health`、`/auth/register`、`/auth/login` 外，其余接口都需要 JWT。
-- 认证头：`Authorization: Bearer <access_token>`
-- 通用状态码：
-  - `200` 成功
-  - `400` 请求参数错误
-  - `401` 未认证或 token 失效
-  - `404` 文件不存在
-  - `409` 用户名冲突
-  - `422` 参数校验失败
-  - `500` 服务内部错误
+通用状态码：
+- `200` 成功
+- `400` 参数或业务错误
+- `401` 未认证或 token 失效
+- `404` 文件不存在
+- `409` 账号已存在
+- `422` 请求体校验失败
+- `500` 服务内部异常
 
 ---
 
-## 2. 健康检查
+## 1) 健康检查
 
 ### GET `/health`
 
-用途：检测后端是否正常运行。
-
-响应：
+响应 JSON：
 
 ```json
 {
@@ -37,42 +33,22 @@
 
 ---
 
-## 3. 用户注册与登录
+## 2) 账号注册
 
 ### POST `/auth/register`
 
 请求 JSON：
 
-| 字段                    | 类型   | 必填 | 说明                    |
-| ----------------------- | ------ | ---- | ----------------------- |
-| username                | string | 是   | 用户名（3-64）          |
-| password                | string | 是   | 密码（6-128）           |
-| emergency_contact_name  | string | 是   | 紧急联系人姓名（1-128） |
-| emergency_contact_email | string | 是   | 紧急联系人邮箱（3-255） |
-
-### POST `/auth/login`
-
-请求 JSON：
-
-| 字段     | 类型   | 必填 | 说明   |
-| -------- | ------ | ---- | ------ |
-| username | string | 是   | 用户名 |
-| password | string | 是   | 密码   |
-
-### GET `/auth/emergency-contact`
-
-用途：通过当前 token 获取该用户已保存的紧急联系人信息。
-
-响应 JSON：
-
 ```json
 {
-  "emergency_contact_name": "张三",
-  "emergency_contact_email": "zhangsan@example.com"
+  "username": "alice",
+  "password": "12345678",
+  "emergency_contact_name": "Bob",
+  "emergency_contact_email": "bob@example.com"
 }
 ```
 
-注册/登录响应：
+响应 JSON：
 
 ```json
 {
@@ -80,7 +56,7 @@
   "token_type": "bearer",
   "user": {
     "id": 1,
-    "username": "demo",
+    "username": "alice",
     "created_at": "2026-01-01T00:00:00"
   }
 }
@@ -88,183 +64,235 @@
 
 ---
 
-## 4. 文本对话
+## 3) 账号密码登录
+
+### POST `/auth/login`
+
+请求 JSON：
+
+```json
+{
+  "username": "alice",
+  "password": "12345678"
+}
+```
+
+响应 JSON（同注册）：
+
+```json
+{
+  "access_token": "<jwt>",
+  "token_type": "bearer",
+  "user": {
+    "id": 1,
+    "username": "alice",
+    "created_at": "2026-01-01T00:00:00"
+  }
+}
+```
+
+---
+
+## 4) 微信小程序登录
+
+### POST `/auth/login_weixin`
+
+说明：
+- 前端传小程序 `code`
+- 后端向微信 `jscode2session` 换取 `openid/session_key`
+- 使用 `openid` 作为用户名、`session_key` 作为口令参与本系统登录流程
+- 流程：先登录，失败则注册后再登录
+- 微信登录不要求紧急联系人信息
+
+请求 JSON：
+
+```json
+{
+  "code": "wx-login-code-from-mini-program"
+}
+```
+
+响应 JSON（同注册/登录）：
+
+```json
+{
+  "access_token": "<jwt>",
+  "token_type": "bearer",
+  "user": {
+    "id": 12,
+    "username": "o2hXg5...openid...",
+    "created_at": "2026-01-01T00:00:00"
+  }
+}
+```
+
+---
+
+## 5) 获取当前用户紧急联系人
+
+### GET `/auth/emergency-contact`
+
+请求头：`Authorization: Bearer <token>`
+
+响应 JSON：
+
+```json
+{
+  "emergency_contact_name": "Bob",
+  "emergency_contact_email": "bob@example.com"
+}
+```
+
+---
+
+## 6) 文本对话
 
 ### POST `/chat/text`
 
 请求 JSON：
 
-| 字段       | 类型   | 必填 | 默认  | 说明                                |
-| ---------- | ------ | ---- | ----- | ----------------------------------- |
-| message    | string | 是   | -     | 用户输入文本                        |
-| prompt     | int    | 否   | null  | 提示词模板编号，支持 `1` 或 `2` |
-| with_text  | bool   | 否   | true  | 是否返回文本字段                    |
-| with_audio | bool   | 否   | false | 是否执行TTS并返回音频URL            |
+```json
+{
+  "message": "今天药该怎么吃？",
+  "prompt": 1,
+  "with_text": true,
+  "with_audio": false
+}
+```
+
+字段说明：
+- `prompt`: 可空，当前支持 `1` 或 `2`
+- `with_text`: 是否返回文本字段
+- `with_audio`: 是否做 TTS 并返回音频 URL
 
 响应 JSON：
 
-| 字段              | 类型        | 说明                                      |
-| ----------------- | ----------- | ----------------------------------------- |
-| answer            | string/null | 便捷文本返回                              |
-| asr_text          | string/null | 文本接口固定 null                         |
-| assistant_text    | string/null | 助手文本结果                              |
-| assistant_payload | object/null | 若模型返回可解析结构化 JSON，则返回该对象 |
-| audio_file_url    | string/null | with_audio=true 且成功生成音频时返回      |
-
-业务规则：
-
-- `prompt=1` 且识别到 `intent=normal_chat`：仅 `reply_text` 会被用于文本输出和 TTS。
-- `prompt=1` 且识别到 `intent=schedule_edit`：不执行 TTS，直接返回结构化文本。
+```json
+{
+  "answer": "...",
+  "asr_text": null,
+  "assistant_text": "...",
+  "assistant_payload": null,
+  "audio_file_url": null
+}
+```
 
 ---
 
-## 5. 语音对话
+## 7) 语音对话
 
 ### POST `/chat/voice`
 
 请求类型：`multipart/form-data`
 
-| 字段       | 类型        | 必填 | 默认  | 说明                                          |
-| ---------- | ----------- | ---- | ----- | --------------------------------------------- |
-| audio      | file        | 是   | -     | 输入音频，支持 `.wav(raw)` / `.mp3(lame)` |
-| prompt     | int         | 否   | null  | 提示词模板编号，支持 `1` 或 `2`           |
-| with_text  | bool/string | 否   | false | 是否返回 ASR + LLM 文本                       |
-| with_audio | bool/string | 否   | true  | 是否执行TTS并返回音频                         |
+表单字段：
+- `audio`: 音频文件（必填，支持 wav/mp3）
+- `prompt`: 可选，`1` 或 `2`
+- `with_text`: 可选，默认 `false`
+- `with_audio`: 可选，默认 `true`
 
-响应规则：
+示例（curl）：
 
-1. `with_audio=true` 且本轮允许TTS：
+```bash
+curl -X POST http://127.0.0.1:8000/chat/voice \
+  -H "Authorization: Bearer <token>" \
+  -F "audio=@demo.wav" \
+  -F "prompt=1" \
+  -F "with_text=true" \
+  -F "with_audio=true"
+```
 
-   - 若 `with_text=false`：直接返回 `audio/mpeg` 文件流
-   - 若 `with_text=true`：返回 JSON（包含 `audio_file_url`）
-2. `with_audio=false` 或业务规则禁止TTS（如 `prompt=1` + `schedule_edit`）：
+响应：
+- 若 `with_audio=true` 且 `with_text=false`，可能直接返回音频流 `audio/mpeg`
+- 其余情况返回 JSON：
 
-   - 返回 JSON，不返回音频流
-
-JSON 响应字段：
-
-| 字段              | 类型        | 说明                                         |
-| ----------------- | ----------- | -------------------------------------------- |
-| asr_text          | string/null | ASR识别文本（with_text=false 时通常为 null） |
-| assistant_text    | string/null | LLM文本结果                                  |
-| assistant_payload | object/null | 结构化结果（若可解析）                       |
-| audio_file_url    | string/null | 生成音频时可下载地址                         |
+```json
+{
+  "asr_text": "...",
+  "assistant_text": "...",
+  "assistant_payload": null,
+  "audio_file_url": "/chat/voice/file/xxx.mp3"
+}
+```
 
 ---
 
-## 6. 语音文件下载
+## 8) 语音文件下载
 
 ### GET `/chat/voice/file/{filename}`
 
-用途：下载语音接口或 OCR 生成的音频文件。
+用途：下载语音回复文件
 
 响应类型：`audio/mpeg`
 
 ---
 
-## 7. OCR 图片分析（单Agent）
+## 9) OCR 图片分析
 
 ### POST `/ocr/analyze`
 
 请求类型：`multipart/form-data`
 
-| 字段       | 类型        | 必填 | 默认       | 说明                           |
-| ---------- | ----------- | ---- | ---------- | ------------------------------ |
-| images     | file[]      | 是   | -          | 一张或多张图片（png/jpg/jpeg） |
-| prompt     | string      | 否   | 默认提示词 | 用户补充问题                   |
-| with_audio | bool/string | 否   | false      | 是否把最终 OCR 文本转语音      |
+表单字段：
+- `images`: 图片文件数组（必填，支持 png/jpg/jpeg）
+- `prompt`: 可选文字补充
+- `with_audio`: 可选，默认 `false`
+- `with_medication_extraction`: 可选，默认 `true`，是否提取用药 JSON 并尝试动态写入 RAG
+
+示例（curl）：
+
+```bash
+curl -X POST http://127.0.0.1:8000/ocr/analyze \
+  -H "Authorization: Bearer <token>" \
+  -F "images=@img1.jpg" \
+  -F "prompt=请分析" \
+  -F "with_audio=false" \
+  -F "with_medication_extraction=true"
+```
 
 响应 JSON：
 
-| 字段           | 类型        | 说明                                                      |
-| -------------- | ----------- | --------------------------------------------------------- |
-| text           | string      | 返回给前端的最终文本（由单Agent输出解析后，已做格式清洗） |
-| audio_file_url | string/null | with_audio=true 且TTS成功时返回                           |
+```json
+{
+  "text": "...专业分析文本...",
+  "audio_file_url": null,
+  "medication_json": {
+    "medicines": [
+      {
+        "药品名": "",
+        "单次剂量": "",
+        "每日频次": "",
+        "服药时间": "",
+        "注意事项": ""
+      }
+    ]
+  },
+  "rag_ingested_count": 1
+}
+```
 
 说明：
-
-- 使用 OCR 视觉模型（`OCR_AGENT_1_MODEL`）直接完成识别与分析。
-- 服务端会解析 `<professional_analysis>` 与 `<plain_text>`，最终对前端返回 `plain_text`。
+- `text` 现在返回 OCR 的专业输出
+- `rag_ingested_count` 表示本次动态写入 RAG 的新增条数
 
 ---
 
-## 8. 紧急告警监听协议（前端/设备对接）
+## 10) 紧急告警监听（非 HTTP）
 
-说明：该能力不是 HTTP API，而是后端启动后在 `ALERT_LISTENER_HOST:ALERT_LISTENER_PORT` 上监听 TCP 报文。
+说明：该能力不是 REST API。后端在 `ALERT_LISTENER_HOST:ALERT_LISTENER_PORT` 监听 TCP JSON 报文。
 
-### 报文格式
-
-发送 UTF-8 JSON 字符串，最少包含 `token`：
+最小报文：
 
 ```json
 {
-  "type": "emergency_fall_alert",
-  "version": "1.0",
   "token": "<jwt-token>"
 }
 ```
 
-字段约定：
+可选字段：
+- `type`: 若传，必须是 `emergency_fall_alert`
+- `version`: 协议版本
 
-| 字段    | 必填 | 说明                                             |
-| ------- | ---- | ------------------------------------------------ |
-| token   | 是   | 用户 JWT，后端据此解析用户名并查库获取紧急联系人 |
-| type    | 否   | 若传入，必须为 `emergency_fall_alert`          |
-| version | 否   | 协议版本，当前建议 `1.0`                       |
-
-### 邮件发送规则
-
-- 后端通过 `token` 找到用户，再读取该用户的 `emergency_contact_name` 与 `emergency_contact_email`。
-- 发送目标：该用户对应的紧急联系人邮箱。
-- 默认邮件正文模板：`（{contact_name}）你好，你家里的老人（{username}）可能刚才跌倒了，请尽快打电话确认老人情况！！！`
-- 模板变量替换：
-  - `{contact_name}` -> 数据库中的紧急联系人姓名
-  - `{username}` -> 当前用户用户名
-
-### 相关环境变量
-
-- `ALERT_LISTENER_HOST`
-- `ALERT_LISTENER_PORT`
-- `ALERT_EMAIL_SUBJECT`
-- `ALERT_EMAIL_BODY`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USERNAME`
-- `SMTP_PASSWORD`
-- `SMTP_SENDER_EMAIL`
-- `SMTP_USE_SSL`
-- `SMTP_USE_TLS`
-
-## 9. 快速调用示例
-
-### 8.1 文本对话
-
-```bash
-curl -X POST http://127.0.0.1:8000/chat/text \
-  -H "Authorization: Bearer <access_token>" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"你好","prompt":1,"with_text":true,"with_audio":false}'
-```
-
-### 8.2 语音对话（返回音频流）
-
-```bash
-curl -X POST http://127.0.0.1:8000/chat/voice \
-  -H "Authorization: Bearer <access_token>" \
-  -F "audio=@demo.wav" \
-  -F "prompt=1" \
-  -F "with_text=false" \
-  -F "with_audio=true" \
-  --output reply.mp3
-```
-
-### 8.3 OCR 图片分析
-
-```bash
-curl -X POST http://127.0.0.1:8000/ocr/analyze \
-  -H "Authorization: Bearer <access_token>" \
-  -F "images=@img1.jpg" \
-  -F "images=@img2.jpg" \
-  -F "prompt=请分析与帕金森病关系" \
-  -F "with_audio=true"
-```
+邮件发送规则：
+- 后端根据 token 找到用户及紧急联系人
+- 按模板发送邮件到联系人邮箱

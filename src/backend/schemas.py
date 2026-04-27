@@ -25,6 +25,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class WeixinLoginRequest(BaseModel):
+    code: str = Field(min_length=1)
+
+
 class UserInfo(BaseModel):
     id: int
     username: str

@@ -11,6 +11,8 @@ from email.message import EmailMessage
 from typing import Any
 from typing import Dict, List
 
+import requests
+
 from sqlalchemy.orm import Session
 
 from src.voice_agent.config import get_settings
@@ -65,6 +67,59 @@ class UserService:
             "emergency_contact_name": user.emergency_contact_name,
             "emergency_contact_email": user.emergency_contact_email,
         }
+
+    @staticmethod
+    def register_weixin_user(db: Session, openid: str, session_key: str):
+        exists = db.query(User).filter(User.username == openid).first()
+        if exists:
+            # 微信 session_key 可能变更，已存在用户时同步更新口令哈希。
+            exists.password_hash = hash_password(session_key)
+            db.add(exists)
+            db.commit()
+            db.refresh(exists)
+            return exists
+        user = User(
+            username=openid,
+            password_hash=hash_password(session_key),
+            emergency_contact_name="",
+            emergency_contact_email="",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+
+
+class WeixinAuthService:
+    @staticmethod
+    def exchange_code_for_session(
+        code: str,
+        app_id: str,
+        app_secret: str,
+        endpoint: str,
+    ) -> dict[str, str]:
+        if not app_id or not app_secret:
+            raise RuntimeError("WEIXIN_APP_ID 或 WEIXIN_APP_SECRET 未配置")
+
+        params = {
+            "appid": app_id,
+            "secret": app_secret,
+            "js_code": code,
+            "grant_type": "authorization_code",
+        }
+        resp = requests.get(endpoint, params=params, timeout=15)
+        if resp.status_code != 200:
+            raise RuntimeError(f"微信服务器请求失败: {resp.status_code} {resp.text}")
+
+        body = resp.json()
+        if body.get("errcode"):
+            raise RuntimeError(f"微信登录失败: {body.get('errcode')} {body.get('errmsg')}")
+
+        openid = str(body.get("openid", "")).strip()
+        session_key = str(body.get("session_key", "")).strip()
+        if not openid or not session_key:
+            raise RuntimeError("微信服务器返回数据不完整(openid/session_key缺失)")
+        return {"openid": openid, "session_key": session_key}
 
 
 class EmergencyAlertService:

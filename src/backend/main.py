@@ -31,8 +31,9 @@ from src.backend.schemas import (
     TextChatRequest,
     TextChatResponse,
     VoiceChatMetaResponse,
+    WeixinLoginRequest,
 )
-from src.backend.services import EmergencyAlertService, UserService, VoiceAgentService, build_auth_response
+from src.backend.services import EmergencyAlertService, UserService, VoiceAgentService, WeixinAuthService, build_auth_response
 from src.OCR_agent.service import OCRMultiAgentService
 from src.RAG.dbinit import sync_rag_knowledge_on_startup
 from src.voice_agent.rag import SimpleRAGStore
@@ -311,6 +312,35 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         logger.warning("Login failed for user: %s", payload.username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
     logger.info("User logged in successfully: %s", payload.username)
+    return build_auth_response(user)
+
+
+@app.post("/auth/login_weixin", response_model=AuthResponse)
+def login_weixin(payload: WeixinLoginRequest, db: Session = Depends(get_db)):
+    logger.info("Weixin login attempt received")
+    try:
+        session_info = WeixinAuthService.exchange_code_for_session(
+            code=payload.code.strip(),
+            app_id=settings.weixin_app_id,
+            app_secret=settings.weixin_app_secret,
+            endpoint=settings.weixin_jscode2session_url,
+        )
+    except RuntimeError as e:
+        logger.warning("Weixin login exchange failed: %s", e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+    openid = session_info["openid"]
+    session_key = session_info["session_key"]
+
+    user = UserService.login(db, openid, session_key)
+    if user is None:
+        user = UserService.register_weixin_user(db, openid, session_key)
+        user = UserService.login(db, openid, session_key)
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="微信登录失败，请重试")
+
+    logger.info("Weixin user logged in successfully: %s", openid)
     return build_auth_response(user)
 
 

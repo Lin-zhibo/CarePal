@@ -26,6 +26,14 @@ class BackendSettings:
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
     jwt_expire_minutes: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 
+    # 微信小程序登录配置
+    weixin_app_id: str = os.getenv("WEIXIN_APP_ID", "")
+    weixin_app_secret: str = os.getenv("WEIXIN_APP_SECRET", "")
+    weixin_jscode2session_url: str = os.getenv(
+        "WEIXIN_JSCODE2SESSION_URL",
+        "https://api.weixin.qq.com/sns/jscode2session",
+    )
+
     # RAG 配置（后端直接读取，供启动同步和动态写入使用）
     rag_enabled: bool = os.getenv("RAG_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
     rag_db_path: str = os.getenv("RAG_DB_PATH", "db/chroma")

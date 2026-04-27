@@ -57,8 +57,6 @@ export const APP_CONFIG = Object.freeze({
       avatar: '',
       name: '康复小伙伴',
       phone: '13800000000',
-      emergencyName: '',
-      emergencyEmail: '',
     }),
     moduleList: Object.freeze([
       Object.freeze({ key: 'chat', label: '对话', desc: '与 AI 对话，解读用药与康复', icon: '/static/icons/chat.svg' }),
@@ -74,7 +72,6 @@ export const APP_CONFIG = Object.freeze({
     chatMessageMaxLength: 300,
     weeklyNoteMaxLength: 1000,
     phoneMaxLength: 11,
-    emergencyEmailMaxLength: 80,
   }),
 
   // 鉴权规则

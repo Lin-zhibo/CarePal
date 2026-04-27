@@ -613,38 +613,6 @@
                 </view>
               </view>
 
-              <view class="carepal-profile-row carepal-profile-row--form">
-                <view class="carepal-profile-label">紧急联系人</view>
-                <view class="carepal-profile-control carepal-profile-control--edit" @tap.stop>
-                  <template v-if="editField === 'emergencyName'">
-                    <input v-model="editValue" placeholder="请输入紧急联系人姓名" />
-                    <button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</button>
-                    <button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</button>
-                  </template>
-                  <template v-else>
-                    <view class="carepal-profile-value carepal-profile-value--click" @tap="beginEdit('emergencyName')">
-                      {{ profile.emergencyName || '未设置' }}
-                    </view>
-                  </template>
-                </view>
-              </view>
-
-              <view class="carepal-profile-row carepal-profile-row--form">
-                <view class="carepal-profile-label">紧急联系人邮箱</view>
-                <view class="carepal-profile-control carepal-profile-control--edit" @tap.stop>
-                  <template v-if="editField === 'emergencyEmail'">
-                    <input v-model="editValue" maxlength="80" placeholder="请输入紧急联系人邮箱" />
-                    <button size="small" class="carepal-profile-btn" @tap="applyEdit">保存</button>
-                    <button size="small" plain class="carepal-profile-btn" @tap="cancelEdit">取消</button>
-                  </template>
-                  <template v-else>
-                    <view class="carepal-profile-value carepal-profile-value--click" @tap="beginEdit('emergencyEmail')">
-                      {{ profile.emergencyEmail || '未设置' }}
-                    </view>
-                  </template>
-                </view>
-              </view>
-
               <view class="carepal-profile-actions">
                 <button type="primary" class="carepal-profile-save" @tap="onSaveProfile">保存修改</button>
               </view>
@@ -696,19 +664,6 @@
         <view class="carepal-login-subtitle">{{ authMode === 'login' ? '登录后可调用受保护接口' : '注册成功后将自动登录' }}</view>
         <input v-model="loginForm.username" :maxlength="authRules.usernameMaxLength" placeholder="请输入用户名" class="carepal-login-input" />
         <input v-model="loginForm.password" type="password" :maxlength="authRules.passwordMaxLength" :placeholder="`请输入密码（至少 ${authRules.passwordMinLength} 位）`" class="carepal-login-input" />
-        <template v-if="authMode === 'register'">
-          <input
-            v-model="loginForm.emergencyName"
-            placeholder="请输入紧急联系人"
-            class="carepal-login-input"
-          />
-          <input
-            v-model="loginForm.emergencyEmail"
-            maxlength="80"
-            placeholder="请输入紧急联系人邮箱"
-            class="carepal-login-input"
-          />
-        </template>
         <view class="carepal-login-actions">
           <button
             v-if="isUserLoggedIn"
@@ -1078,8 +1033,6 @@ export default {
       loginForm: {
         username: '',
         password: '',
-        emergencyName: '',
-        emergencyEmail: '',
       },
       scheduleItems: [
         {
@@ -1146,8 +1099,6 @@ export default {
         31: true,
       },
       medicationRecordsMap: {},
-      medicationMonthCache: {},
-      medicationMonthCacheStorageKey: 'carepal_medication_month_cache',
       medicationCalendarCells: [],
       selectedCalendarDay: 0,
       selectedCalendarDetail: null,
@@ -1194,8 +1145,6 @@ export default {
         avatar: '',
         name: '康复小伙伴',
         phone: '13800000000',
-        emergencyName: '',
-        emergencyEmail: '',
       },
       editField: '',
       editValue: '',
@@ -1205,7 +1154,6 @@ export default {
   },
   onLoad() {
     this.loadLocalSettings()
-    this.loadMedicationMonthCacheFromStorage()
     this.currentWeekRange = this.getCurrentWeekRange()
     const savedToken = uni.getStorageSync(this.storageKeys.accessToken)
     this.authToken = typeof savedToken === 'string' ? savedToken : ''
@@ -1481,8 +1429,6 @@ export default {
     openLoginDialog() {
       this.loginForm.username = ''
       this.loginForm.password = ''
-      this.loginForm.emergencyName = ''
-      this.loginForm.emergencyEmail = ''
       this.authMode = 'login'
       this.loginDialogVisible = true
     },
@@ -1512,8 +1458,6 @@ export default {
       this.isUserLoggedIn = false
       this.loginForm.username = ''
       this.loginForm.password = ''
-      this.loginForm.emergencyName = ''
-      this.loginForm.emergencyEmail = ''
       uni.removeStorageSync(this.storageKeys.accessToken)
       uni.removeStorageSync(this.storageKeys.authUsername)
       this.restoreChatHistory()
@@ -1535,19 +1479,7 @@ export default {
       if (password.length > this.authRules.passwordMaxLength) {
         throw new Error(`密码最多 ${this.authRules.passwordMaxLength} 位`)
       }
-
-      const emergencyName = (this.loginForm.emergencyName || '').trim()
-      const emergencyEmail = (this.loginForm.emergencyEmail || '').trim()
-      if (this.authMode === 'register') {
-        if (!emergencyName || !emergencyEmail) {
-          throw new Error('请填写紧急联系人与邮箱')
-        }
-        const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emergencyEmail)
-        if (!validEmail) {
-          throw new Error('紧急联系人邮箱格式不正确')
-        }
-      }
-      return { username, password, emergencyName, emergencyEmail }
+      return { username, password }
     },
     applyAuthSuccess(username, token) {
       this.authToken = token
@@ -1597,15 +1529,13 @@ export default {
     },
     async submitRegister() {
       try {
-        const { username, password, emergencyName, emergencyEmail } = this.validateAuthForm()
+        const { username, password } = this.validateAuthForm()
         const registerData = await this.requestJson({
           path: this.apiPaths.register,
           method: 'POST',
           data: {
             username,
             password,
-            emergency_contact_name: emergencyName,
-            emergency_contact_email: emergencyEmail,
           },
         })
         let token = (registerData && registerData.access_token) || ''
@@ -1624,8 +1554,6 @@ export default {
         }
 
         this.profile.name = username
-        this.profile.emergencyName = emergencyName
-        this.profile.emergencyEmail = emergencyEmail
 
         this.applyAuthSuccess(username, token)
         uni.showToast({ title: '注册并登录成功', icon: 'success' })
@@ -2690,7 +2618,6 @@ export default {
       if (this.selectedCalendarDay === day) {
         this.selectedCalendarDetail = this.buildSelectedDayDetail(day)
       }
-      this.persistCurrentMonthDataToCache()
       this.rebuildMedicationCalendarCells()
       this.updateMedicationStatusHint()
       return true
@@ -3462,30 +3389,6 @@ export default {
       this.switchWeeklyPage(this.activeWeeklyPageIndex + 1)
     },
     /**
-     * Load monthly medication cache from local storage.
-     * @returns {void}
-     */
-    loadMedicationMonthCacheFromStorage() {
-      const saved = uni.getStorageSync(this.medicationMonthCacheStorageKey)
-      if (!saved || typeof saved !== 'object') {
-        this.medicationMonthCache = {}
-        return
-      }
-
-      const nextCache = {}
-      Object.keys(saved).forEach((cacheKey) => {
-        nextCache[cacheKey] = this.cloneMedicationMonthData(saved[cacheKey])
-      })
-      this.medicationMonthCache = nextCache
-    },
-    /**
-     * Persist monthly medication cache to local storage.
-     * @returns {void}
-     */
-    persistMedicationMonthCacheToStorage() {
-      uni.setStorageSync(this.medicationMonthCacheStorageKey, this.medicationMonthCache)
-    },
-    /**
      * Build daily storage key for reminder de-duplication state.
      * @param {string} dateKey - Date text in YYYY-MM-DD format.
      * @returns {string} Storage key.
@@ -3494,55 +3397,13 @@ export default {
       return `${this.medicationReminderStoragePrefix}${dateKey}`
     },
     /**
-     * Build cache key for monthly medication records.
+     * Get month data snapshot (no-op stub for compatibility).
      * @param {number} year - Calendar year.
      * @param {number} month - Calendar month index in range [0, 11].
-     * @returns {string} Stable key formatted as YYYY-MM.
-     */
-    getMedicationMonthCacheKey(year, month) {
-      return `${year}-${String(month + 1).padStart(2, '0')}`
-    },
-    /**
-     * Clone monthly medication data to avoid cross-reference side effects.
-     * @param {{statusMap?: Object, recordsMap?: Object}} monthData - Raw month payload.
-     * @returns {{statusMap: Object, recordsMap: Object}} Deep-cloned month payload.
-     */
-    cloneMedicationMonthData(monthData = {}) {
-      const statusMap = { ...(monthData.statusMap || {}) }
-      const sourceRecordsMap = monthData.recordsMap || {}
-      const recordsMap = {}
-      Object.keys(sourceRecordsMap).forEach((day) => {
-        const records = Array.isArray(sourceRecordsMap[day]) ? sourceRecordsMap[day] : []
-        recordsMap[day] = records.map((record) => ({ ...record }))
-      })
-      return { statusMap, recordsMap }
-    },
-    /**
-     * Get month data from cache and lazily initialize fallback mock data when missing.
-     * @param {number} year - Calendar year.
-     * @param {number} month - Calendar month index in range [0, 11].
-     * @returns {{statusMap: Object, recordsMap: Object}} Cloned month data snapshot.
+     * @returns {{statusMap: Object, recordsMap: Object}} Month data.
      */
     getMedicationMonthDataSnapshot(year, month) {
-      const cacheKey = this.getMedicationMonthCacheKey(year, month)
-      if (!this.medicationMonthCache[cacheKey]) {
-        this.medicationMonthCache[cacheKey] = this.cloneMedicationMonthData(
-          this.getMedicationMonthData(year, month)
-        )
-      }
-      return this.cloneMedicationMonthData(this.medicationMonthCache[cacheKey])
-    },
-    /**
-     * Persist current in-memory month state back to month cache.
-     * @returns {void}
-     */
-    persistCurrentMonthDataToCache() {
-      const cacheKey = this.getMedicationMonthCacheKey(this.currentCalendarYear, this.currentCalendarMonth)
-      this.medicationMonthCache[cacheKey] = this.cloneMedicationMonthData({
-        statusMap: this.medicationStatusMap,
-        recordsMap: this.medicationRecordsMap,
-      })
-      this.persistMedicationMonthCacheToStorage()
+      return this.getMedicationMonthData(year, month)
     },
     /**
      * Check whether a calendar day is in the future compared with local today.
@@ -3968,7 +3829,6 @@ export default {
           this.updateDayMedicationStatus(day, dayRecords)
         }
 
-        this.persistCurrentMonthDataToCache()
         this.rebuildMedicationCalendarCells()
         this.updateMedicationStatusHint()
 
@@ -4004,7 +3864,6 @@ export default {
       this.selectedCalendarDetail = this.buildSelectedDayDetail(day)
       this.updateDayMedicationStatus(day, dayRecords)
 
-      this.persistCurrentMonthDataToCache()
       this.rebuildMedicationCalendarCells()
       this.updateMedicationStatusHint()
 
@@ -4051,7 +3910,6 @@ export default {
       dayRecords.sort((a, b) => String(a.time).localeCompare(String(b.time)))
       this.medicationRecordsMap[day] = dayRecords
       this.updateDayMedicationStatus(day, dayRecords)
-      this.persistCurrentMonthDataToCache()
       this.rebuildMedicationCalendarCells()
       this.selectedCalendarDetail = this.buildSelectedDayDetail(day)
       this.updateMedicationStatusHint()
@@ -4156,14 +4014,6 @@ export default {
       const savedProfile = uni.getStorageSync('carepal_profile')
       if (savedProfile && typeof savedProfile === 'object') {
         this.profile = { ...this.profile, ...savedProfile }
-      }
-
-      if (!this.profile.emergencyEmail && typeof this.profile.emergencyPhone === 'string') {
-        const legacy = this.profile.emergencyPhone.trim()
-        const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(legacy)
-        if (validEmail) {
-          this.profile.emergencyEmail = legacy
-        }
       }
 
       const elderMode = uni.getStorageSync('carepal_elderMode')

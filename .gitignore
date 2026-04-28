@@ -13,7 +13,8 @@ memory/
 dataset
 db
 */*/__pycache__
-models
+/models/
+/models/*
 /doc/.env
 test
 tmp

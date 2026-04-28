@@ -1,0 +1,10 @@
+{
+  "timestamp": "20260428_001002",
+  "model_path": "out\\20260428_001002\\models\\best_model.pth",
+  "val_f1": 0.7719298245614036,
+  "dataset_roots": [
+    "dataset/GMDCSA24-A-Dataset-for-Human-Fall-Detection-in-Videos-v2.1",
+    "dataset/shahliza27/ur-fall-detection-dataset",
+    "dataset/tuyenldvn/falldataset-imvia"
+  ]
+}

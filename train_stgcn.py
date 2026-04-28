@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import logging
@@ -73,7 +74,8 @@ def load_config(config_path: str = "config/models.json") -> dict:
 
 def make_cache_key(task_desc: str, video_path: str) -> str:
     """生成缓存文件名的 hash key"""
-    sig = f"{task_desc}:{video_path}"
+    rel = video_path.replace("\\", "/")
+    sig = f"{task_desc}:{rel}"
     return hashlib.md5(sig.encode("utf-8")).hexdigest()[:16]
 
 
@@ -92,7 +94,7 @@ def save_cache(cache_data: dict, cache_path: Path) -> None:
 def load_cache(cache_path: Path) -> dict | None:
     """加载 npz 缓存，失败返回 None"""
     try:
-        with np.load(cache_path) as data:
+        with np.load(cache_path, allow_pickle=True) as data:
             result = {}
             for k in data.files:
                 val = data[k]
@@ -269,12 +271,15 @@ def scan_datasets(dataset_roots: list, yolo_model, device: str, config: dict, ca
         # 缓存查找
         if cache_root is not None:
             cache_path = build_cache_path(vpath_str, task_desc, cache_root)
+            logger.info(f"[{video_path.name}] cache_path={cache_path}, exists={cache_path.exists()}")
             if not force_cache and cache_path.exists():
                 data = load_cache(cache_path)
+                logger.info(f"[{video_path.name}] load_cache returned={data is not None}")
                 if data is not None:
                     kp_seq = list(data["keypoints"])
                     img_sizes[vpath_str] = tuple(data["img_size"])
                     cache_hit = True
+                    logger.info(f"[{video_path.name}] 缓存命中, keypoints帧数={len(kp_seq)}")
 
         # 缓存未命中：YOLO 抽取
         if not cache_hit:
@@ -465,7 +470,7 @@ def train_stgcn(
             hidden_dims=hidden_dims,
             dropout=dropout,
         ).to(device)
-        criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 3.0]).to(device))
+        criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0]).to(device))
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
         best_f1 = 0
@@ -483,7 +488,7 @@ def train_stgcn(
 
             if val_f1 > best_f1:
                 best_f1 = val_f1
-                best_state = model.state_dict().copy()
+                best_state = copy.deepcopy(model.state_dict())
 
             tqdm.write(f"  Epoch {epoch+1}/{epochs}: loss={train_loss:.4f}, val_f1={val_f1:.4f}")
 
@@ -505,27 +510,19 @@ def train_stgcn(
     criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 3.0]).to(device))
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    best_f1 = 0
-    best_state = None
     full_metrics = {"loss": [], "precision": [], "recall": [], "f1": []}
 
     for epoch in tqdm(range(epochs), desc="Full Training", unit="epoch"):
         train_loss = train_epoch(model, full_loader, optimizer, criterion, device)
         val_prec, val_rec, val_f1, _, _, _, _ = evaluate(model, full_loader, device)
-
         full_metrics["loss"].append(train_loss)
         full_metrics["precision"].append(val_prec)
         full_metrics["recall"].append(val_rec)
         full_metrics["f1"].append(val_f1)
-
-        if val_f1 > best_f1:
-            best_f1 = val_f1
-            best_state = model.state_dict().copy()
-
         tqdm.write(f"  Epoch {epoch+1}/{epochs}: loss={train_loss:.4f}, val_f1={val_f1:.4f}")
 
-    torch.save(best_state, MODELS_DIR / "best_model.pth")
-    logger.info(f"全量训练完成，最优 F1: {best_f1:.4f}")
+    torch.save(model.state_dict(), MODELS_DIR / "best_model.pth")
+    logger.info("全量训练完成")
 
     # 绘制曲线
     plot_metrics(fold_metrics, full_metrics)

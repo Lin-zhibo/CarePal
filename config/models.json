@@ -6,17 +6,19 @@
         "dataset/shahliza27/ur-fall-detection-dataset",
         "dataset/tuyenldvn/falldataset-imvia"
     ],
-    "cache_dir": "/tmp/ne",
+    "cache_dir": "./tmp/ne",
     "cache_force_rebuild": false,
     "STGCN_in_channels": 3,
     "STGCN_num_classes": 2,
     "STGCN_window_size": 30,
-    "STGCN_stride": 15,
+    "STGCN_stride": 5,
     "STGCN_hidden_dims": [64, 128, 256],
-    "STGCN_dropout": 0.5,
-    "STGCN_epochs": 200,
+    "STGCN_dropout": 0.2,
+    "STGCN_epochs": 150,
     "STGCN_batch_size": 32,
     "STGCN_lr": 0.001,
     "STGCN_n_folds": 8,
-    "STGCN_fall_streak_threshold": 5
+    "STGCN_fall_streak_threshold": 5,
+    "STGCN_eval_min_streak": 3,
+    "STGCN_eval_positive_ratio": 0.15
 }

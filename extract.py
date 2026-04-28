@@ -43,9 +43,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ------------------------------------------------------------
+
 # 缓存路径与读写
-# ------------------------------------------------------------
+
 
 
 def make_cache_key(task_desc: str, video_path: Path) -> str:
@@ -77,15 +77,15 @@ def save_cache(cache_data: dict, cache_path: Path) -> None:
 def load_cache(cache_path: Path) -> dict | None:
     """加载 npz 缓存，失败返回 None"""
     try:
-        with np.load(cache_path) as data:
+        with np.load(cache_path, allow_pickle=True) as data:
             return {k: data[k].item() if data[k].shape == () else data[k] for k in data.files}
     except Exception:
         return None
 
 
-# ------------------------------------------------------------
+
 # 关键点抽取（复用 train_stgcn.py 的逻辑）
-# ------------------------------------------------------------
+
 
 
 def get_video_dimensions(video_path: Path, task_desc: str) -> tuple[int, int]:
@@ -184,9 +184,9 @@ def extract_single_video(
     }
 
 
-# ------------------------------------------------------------
+
 # 任务扫描
-# ------------------------------------------------------------
+
 
 
 def scan_tasks(dataset_roots: list[Path], config: dict) -> list[tuple]:
@@ -215,9 +215,9 @@ def scan_tasks(dataset_roots: list[Path], config: dict) -> list[tuple]:
     return tasks
 
 
-# ------------------------------------------------------------
+
 # 主抽取流程
-# ------------------------------------------------------------
+
 
 
 def run_extract(
@@ -270,14 +270,14 @@ def run_extract(
     logger.info(f"缓存目录: {cache_root}")
 
 
-# ------------------------------------------------------------
+
 # CLI
-# ------------------------------------------------------------
+
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="STGCN 关键点抽取（独立模式）")
-    parser.add_argument("--cache-dir", type=str, default="/tmp/ne", help="缓存根目录")
+    parser.add_argument("--cache-dir", type=str, default="./tmp/ne", help="缓存根目录")
     parser.add_argument("--force", action="store_true", help="强制重建已存在的缓存")
     parser.add_argument("--device", type=str, default="cuda" if __import__("torch").cuda.is_available() else "cpu")
     parser.add_argument("--yolo-model", type=str, default=None, help="YOLO 模型路径")

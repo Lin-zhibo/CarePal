@@ -17,5 +17,5 @@ test
 tmp
 .omc
 .claude
-out
+# out
 .zip

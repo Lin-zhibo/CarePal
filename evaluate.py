@@ -110,6 +110,28 @@ def extract_keypoints(video_path: Path, yolo_model, device: str) -> list:
     return keypoints_list
 
 
+def get_img_size(video_path: Path, cache_hit: bool, cache_data: dict | None) -> tuple[int, int]:
+    """获取图像/视频的原始尺寸，优先从缓存读取，否则直接读取"""
+    if cache_hit and cache_data is not None:
+        return tuple(cache_data["img_size"])
+    if video_path.is_dir():
+        first_img = next(video_path.glob("*.png"), None)
+        if first_img is None:
+            return (640, 640)
+        frame = cv2.imread(str(first_img))
+        if frame is None:
+            return (640, 640)
+        h, w = frame.shape[:2]
+    else:
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            return (640, 640)
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+    return (w, h)
+
+
 def extract_keypoints_from_images(image_folder: Path, yolo_model, device: str) -> list:
     """从 PNG 图像序列文件夹提取所有帧的关键点序列"""
     keypoints_list = []
@@ -174,6 +196,8 @@ def evaluate_testset(
     window_size = config.get("STGCN_window_size", 30)
     stride = config.get("STGCN_stride", 15)
     streak_threshold = config.get("STGCN_fall_streak_threshold", 5)
+    min_streak = config.get("STGCN_eval_min_streak", 3)
+    positive_ratio_threshold = config.get("STGCN_eval_positive_ratio", 0.15)
     num_classes = config.get("STGCN_num_classes", 2)
 
     if output_path is None:
@@ -244,13 +268,16 @@ def evaluate_testset(
 
         # 缓存查找
         cache_hit = False
+        cache_data = None
         if cache_root is not None:
             cache_path = build_cache_path(vpath_str, task_desc, cache_root)
             if not force_cache and cache_path.exists():
-                data = load_cache(cache_path)
-                if data is not None:
-                    kp_seq = list(data["keypoints"])
+                cache_data = load_cache(cache_path)
+                if cache_data is not None:
+                    kp_seq = list(cache_data["keypoints"])
                     cache_hit = True
+
+        img_size = get_img_size(video_path, cache_hit, cache_data)
 
         # 缓存未命中：YOLO 抽取
         if not cache_hit:
@@ -263,7 +290,7 @@ def evaluate_testset(
             if cache_root is not None and kp_seq:
                 cache_data = {
                     "keypoints": np.array(kp_seq, dtype=np.float32),
-                    "img_size": (640, 640),
+                    "img_size": img_size,
                     "task_desc": task_desc,
                     "label": gt_label,
                     "fall_start": None,
@@ -279,19 +306,23 @@ def evaluate_testset(
         max_streak = 0
         current_streak = 0
         T = len(kp_seq)
+        positive_count = 0
 
         for start in range(0, T - window_size + 1, stride):
             end = start + window_size
             window_seq = np.array(kp_seq[start:end])
-            pred, conf = pipeline.predict(window_seq)
+            pred, conf = pipeline.predict(window_seq, img_size=img_size)
             if pred == 1:
                 current_streak += 1
+                positive_count += 1
                 if current_streak > max_streak:
                     max_streak = current_streak
             else:
                 current_streak = 0
 
-        predicted_label = 1 if max_streak >= streak_threshold else 0
+        num_windows = (T - window_size) // stride + 1
+        ratio = positive_count / num_windows if num_windows > 0 else 0
+        predicted_label = 1 if (max_streak >= min_streak and ratio >= positive_ratio_threshold) else 0
 
         if gt_label == 1 and predicted_label == 1:
             tp += 1
